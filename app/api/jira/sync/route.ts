@@ -60,19 +60,36 @@ export async function POST(req: Request) {
   const overwriteProgress: boolean = body.overwriteProgress !== false;
 
   const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64");
-  const fields = ["summary", "status", "issuetype", "parent", "resolutiondate", spField, sprintField].join(",");
 
-  /* ---------- ambil semua issue (maks 5 halaman × 100) ---------- */
+  // Endpoint /rest/api/3/search sudah DIHAPUS Atlassian. Penggantinya /rest/api/3/search/jql:
+  // - paginasi pakai nextPageToken, bukan startAt
+  // - `fields` WAJIB disebut; defaultnya cuma "id", jadi story point & sprint bakal kosong kalau lupa
+  // - response tidak lagi punya `total`
+  const fieldList = ["summary", "status", "issuetype", "parent", "resolutiondate", spField, sprintField];
+
+  /* ---------- ambil semua issue (maks 20 halaman × 100) ---------- */
   const issues: JiraIssue[] = [];
+  let nextPageToken: string | undefined;
+  const seenTokens = new Set<string>();
+
   try {
-    for (let page = 0; page < 5; page++) {
-      const url =
-        `${JIRA_BASE_URL}/rest/api/3/search?jql=${encodeURIComponent(jql)}` +
-        `&fields=${encodeURIComponent(fields)}&startAt=${page * 100}&maxResults=100`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+    for (let page = 0; page < 20; page++) {
+      const res = await fetch(`${JIRA_BASE_URL}/rest/api/3/search/jql`, {
+        method: "POST", // POST biar JQL panjang nggak perlu di-URL-encode
+        headers: {
+          Authorization: `Basic ${auth}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jql,
+          fields: fieldList,
+          maxResults: 100,
+          ...(nextPageToken ? { nextPageToken } : {}),
+        }),
         cache: "no-store",
       });
+
       if (!res.ok) {
         const msg = await res.text();
         return NextResponse.json(
@@ -80,13 +97,28 @@ export async function POST(req: Request) {
           { status: 400 }
         );
       }
+
       const json = await res.json();
-      issues.push(...(json.issues ?? []));
-      if (issues.length >= (json.total ?? 0) || (json.issues ?? []).length === 0) break;
+      const batch: JiraIssue[] = json.issues ?? [];
+      issues.push(...batch);
+
+      nextPageToken = json.nextPageToken;
+      if (!nextPageToken || json.isLast === true || batch.length === 0) break;
+
+      // Pengaman: endpoint ini punya bug yang bisa mengembalikan token berulang
+      // dan bikin loop tak berujung. Kalau token sudah pernah kelihatan, berhenti.
+      if (seenTokens.has(nextPageToken)) break;
+      seenTokens.add(nextPageToken);
     }
   } catch (e: any) {
     return NextResponse.json({ error: `Tidak bisa menghubungi Jira: ${e.message}` }, { status: 502 });
   }
+
+  // Buang duplikat kalau paginasi sempat mengulang halaman yang sama.
+  const seenKeys = new Set<string>();
+  const unique = issues.filter((i) => (seenKeys.has(i.key) ? false : (seenKeys.add(i.key), true)));
+  issues.length = 0;
+  issues.push(...unique);
 
   const db = adminClient();
   const epicIssues = issues.filter((i) => i.fields.issuetype?.name === "Epic");

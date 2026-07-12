@@ -37,14 +37,14 @@ async function requireUser() {
   return data.user;
 }
 
-const { JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY } = process.env;
+export async function POST(req: Request) {
+  const user = await requireUser();
+  if (!user) return NextResponse.json({ error: "Harus login dulu." }, { status: 401 });
+
+  const { JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY } = process.env;
   if (!JIRA_BASE_URL || !JIRA_EMAIL || !JIRA_API_TOKEN) {
-    // sebutkan variabel mana yang kosong, biar nggak nebak-nebak
-    const missing = Object.entries({ JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN })
-      .filter(([, v]) => !v)
-      .map(([k]) => k);
     return NextResponse.json(
-      { error: `Environment variable belum terbaca: ${missing.join(", ")}. Kalau sudah diisi di Vercel, redeploy dulu.` },
+      { error: "Kredensial Jira belum diisi di environment variable (JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN)." },
       { status: 400 }
     );
   }

@@ -54,7 +54,7 @@ export default function SyncPage() {
 
       <PageHead
         title="Jira Sync"
-        sub="Tarik epic & story langsung dari Jira. Read-only — nggak ada yang diubah di Jira."
+        sub="Menarik epic dan story dari Jira. Bersifat read-only — tidak ada data di Jira yang diubah."
       />
 
       <Card>

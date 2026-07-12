@@ -66,7 +66,7 @@ export default function FlagsPage() {
 
       <PageHead
         title="Feature Flag"
-        sub="Klik sel DEV / UAT / PROD untuk ganti: TRUE → FALSE → belum dikonfigurasi. Isi hanya untuk epic yang pakai flag."
+        sub="Kondisi flag di tiap environment. Klik sel DEV, UAT, atau PROD untuk mengubah nilainya. Cukup dicatat untuk epic yang memang memakai flag."
       >
         <Select
           className="w-60"

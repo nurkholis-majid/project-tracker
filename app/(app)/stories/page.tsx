@@ -51,8 +51,6 @@ export default function StoriesPage() {
     [data.stories, epicF, progF, q]
   );
 
-  if (loading) return <Loading />;
-
   const relOf = (id: string | null) => data.releases.find((r) => r.id === id)?.fix_version;
 
   /* Mode "per project": kelompokkan per epic, epic terbaru dulu, Done paling bawah. */
@@ -84,6 +82,10 @@ export default function StoriesPage() {
     if (sort === "judul") list.sort((a, b) => a.title.localeCompare(b.title));
     return list;
   }, [filtered, sort]);
+
+  // Semua hook harus dipanggil sebelum early return apa pun — kalau tidak,
+  // jumlah hook berubah antar render dan React melempar client-side exception.
+  if (loading) return <Loading />;
 
   const submit = async () => {
     if (!form?.title) return;
@@ -138,7 +140,7 @@ export default function StoriesPage() {
     <div className="space-y-5">
       <ErrorBar msg={error} />
 
-      <PageHead title="Story" sub="Klik badge progress untuk ganti cepat. Story yang Done otomatis turun ke bawah.">
+      <PageHead title="Story" sub="Progress bisa diubah langsung dari tabel. Story berstatus Done otomatis turun ke bawah agar yang berjalan tetap terlihat.">
         <input className={inputCls + " w-48"} placeholder="🔍 Cari story / DLB-…" value={q}
           onChange={(e) => setQ(e.target.value)} />
         <Select
@@ -163,7 +165,7 @@ export default function StoriesPage() {
 
       <Card>
         <table className="w-full border-collapse">
-          <thead>{HEAD}</thead>
+          <thead className="sticky top-0 z-10">{HEAD}</thead>
           <tbody>
             {sort === "epic" &&
               grouped.map((g) => {

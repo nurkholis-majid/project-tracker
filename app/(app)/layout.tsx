@@ -10,7 +10,7 @@ const NAV = [
   { href: "/epics",     icon: "📦", label: "Epic" },
   { href: "/stories",   icon: "📝", label: "Story" },
   { href: "/releases",  icon: "🚀", label: "Release & Dokumen" },
-  { href: "/flags",     icon: "🎚️", label: "Feature Flag" },
+  { href: "/flags",     icon: "🚩", label: "Feature Flag" },
   { href: "/sync",      icon: "🔄", label: "Jira Sync" },
 ];
 

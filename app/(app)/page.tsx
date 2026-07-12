@@ -128,7 +128,7 @@ export default function OverviewPage() {
 
       <PageHead
         title="Overview"
-        sub={`Kondisi delivery hari ini. Angka KPI Semester ${sem.half} ${sem.year} ada di menu Rekap Semester.`}
+        sub={`Ringkasan delivery hari ini — sprint berjalan, velocity, dan hal yang perlu ditindaklanjuti. Angka penilaian Semester ${sem.half} ${sem.year} ada di menu Rekap Semester.`}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

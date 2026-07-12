@@ -5,8 +5,7 @@ import { useTracker } from "@/lib/useTracker";
 import { barGeom, computeKpi, csvOfStories, epicStats, fmt, recapText, semesterOf } from "@/lib/kpi";
 import { labelOf } from "@/lib/types";
 import {
-  BAR_TONE, Badge, Btn, Card, ErrorBar, JiraLink, Label, Loading, Metric, Progress,
-  Select, Td, Th, inputCls,
+  BAR_TONE, Badge, Btn, ErrorBar, Label, Loading, Metric, Progress, Segmented, Stepper,
 } from "@/components/ui";
 
 export default function RecapPage() {
@@ -56,29 +55,49 @@ export default function RecapPage() {
     <div className="space-y-6">
       <ErrorBar msg={error} />
 
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <Label>Periode penilaian</Label>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Semester {half} · {year}</h1>
-          <p className="mt-1 font-mono text-xs text-mist-600">{fmt(sem.start)} — {fmt(sem.end)}</p>
+      <header className="rounded-2xl border border-mist-200 bg-white p-5 shadow-card">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Label>Periode penilaian</Label>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Semester {half} · {year}</h1>
+            <p className="mt-1 font-mono text-xs text-mist-600">{fmt(sem.start)} — {fmt(sem.end)}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented
+              value={String(half)}
+              onChange={(v) => setHalf(Number(v) as 1 | 2)}
+              options={[
+                { value: "1", label: "Semester 1" },
+                { value: "2", label: "Semester 2" },
+              ]}
+            />
+            <Stepper value={year} onChange={setYear} min={now.getFullYear() - 3} max={now.getFullYear() + 1} />
+            <Btn onClick={downloadCsv}>⬇︎ Export CSV</Btn>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Select
-            className="w-36"
-            value={String(half)}
-            onChange={(v) => setHalf(Number(v) as 1 | 2)}
-            options={[
-              { value: "1", label: "Semester 1" },
-              { value: "2", label: "Semester 2" },
-            ]}
-          />
-          <Select
-            className="w-28"
-            value={String(year)}
-            onChange={(v) => setYear(Number(v))}
-            options={[year - 2, year - 1, year, year + 1].map((y) => ({ value: String(y), label: String(y) }))}
-          />
-          <Btn onClick={downloadCsv}>⬇︎ CSV</Btn>
+
+        {/* Loncat cepat ke periode yang paling sering dibuka. */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-mist-100 pt-4">
+          <span className="text-xs text-mist-600">Loncat ke:</span>
+          {[
+            { label: "Semester berjalan", h: (now.getMonth() < 6 ? 1 : 2) as 1 | 2, y: now.getFullYear() },
+            { label: "Semester lalu", h: (now.getMonth() < 6 ? 2 : 1) as 1 | 2, y: now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear() },
+            { label: "Tahun lalu · S2", h: 2 as 1 | 2, y: now.getFullYear() - 1 },
+          ].map((p) => {
+            const on = p.h === half && p.y === year;
+            return (
+              <button
+                key={p.label}
+                onClick={() => { setHalf(p.h); setYear(p.y); }}
+                className={`rounded-full px-3 py-1 text-xs transition ${
+                  on ? "bg-sun-100 font-semibold text-sun-700" : "bg-mist-100 text-ink-700 hover:bg-mist-200"
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
         </div>
       </header>
 

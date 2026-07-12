@@ -67,7 +67,7 @@ export default function ReleasesPage() {
 
       <PageHead
         title="Release & Dokumen"
-        sub="1 fix version = 1 folder SharePoint. Epic yang ikut di dalamnya terisi otomatis dari story."
+        sub="Setiap fix version punya satu folder SharePoint. Daftar epic di dalamnya terisi otomatis dari story yang di-assign ke versi tersebut."
       >
         <Btn tone="accent" onClick={() => openForm()}>+ Fix version</Btn>
       </PageHead>

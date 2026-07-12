@@ -63,7 +63,7 @@ export default function EpicsPage() {
 
       <PageHead
         title="Epic"
-        sub="1 epic = 1 project. Total story dan story point dihitung otomatis dari tab Story."
+        sub="Satu epic mewakili satu project. Total story dan story point terhitung otomatis dari data story — tidak perlu diisi manual."
       >
         <Select
           className="w-52"

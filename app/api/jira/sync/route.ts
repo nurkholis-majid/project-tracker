@@ -9,22 +9,23 @@ export const dynamic = "force-dynamic";
    Tarik issue dari Jira (read-only) ke Supabase.
 
    Yang DITIMPA dari Jira : judul, story point, sprint, tanggal sprint,
-                            status Jira, dan (opsional) progress.
+                            status Jira, relasi story -> epic,
+                            dan (opsional) progress.
    Yang TIDAK DISENTUH    : task_group, release_id, release_status,
                             notes, tanggal & status epic, feature flag.
    Jadi kolom custom lu aman meski sync dijalankan berkali-kali.
 -------------------------------------------------------------------- */
 
-type JiraIssue = {
-  key: string;
-  fields: Record<string, any>;
-};
+type JiraIssue = { key: string; fields: Record<string, any> };
 
 const mapProgress = (statusCategoryKey?: string) => {
   if (statusCategoryKey === "done") return "Done";
   if (statusCategoryKey === "indeterminate") return "In Dev";
   return "Todo";
 };
+
+/** Epic = hierarchyLevel 1. Nama tipe bisa beda per instance, jadi jangan cuma andalkan "Epic". */
+const isEpicType = (t: any) => t?.hierarchyLevel === 1 || t?.name === "Epic";
 
 async function requireUser() {
   const store = await cookies();
@@ -43,14 +44,18 @@ export async function POST(req: Request) {
 
   const { JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY } = process.env;
   if (!JIRA_BASE_URL || !JIRA_EMAIL || !JIRA_API_TOKEN) {
+    const missing = Object.entries({ JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN })
+      .filter(([, v]) => !v)
+      .map(([k]) => k);
     return NextResponse.json(
-      { error: "Kredensial Jira belum diisi di environment variable (JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN)." },
+      { error: `Environment variable belum terbaca: ${missing.join(", ")}. Kalau sudah diisi di Vercel, redeploy dulu.` },
       { status: 400 }
     );
   }
 
   const spField = process.env.JIRA_STORY_POINTS_FIELD || "customfield_10016";
   const sprintField = process.env.JIRA_SPRINT_FIELD || "customfield_10020";
+  const epicLinkField = process.env.JIRA_EPIC_LINK_FIELD; // opsional: skema lama (Epic Link)
 
   const body = await req.json().catch(() => ({}));
   const jql: string =
@@ -60,74 +65,97 @@ export async function POST(req: Request) {
   const overwriteProgress: boolean = body.overwriteProgress !== false;
 
   const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64");
+  const authHeaders = {
+    Authorization: `Basic ${auth}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
 
   // Endpoint /rest/api/3/search sudah DIHAPUS Atlassian. Penggantinya /rest/api/3/search/jql:
-  // - paginasi pakai nextPageToken, bukan startAt
-  // - `fields` WAJIB disebut; defaultnya cuma "id", jadi story point & sprint bakal kosong kalau lupa
-  // - response tidak lagi punya `total`
+  // paginasi pakai nextPageToken, dan `fields` WAJIB disebut (defaultnya cuma "id").
   const fieldList = ["summary", "status", "issuetype", "parent", "resolutiondate", spField, sprintField];
+  if (epicLinkField) fieldList.push(epicLinkField);
 
-  /* ---------- ambil semua issue (maks 20 halaman × 100) ---------- */
-  const issues: JiraIssue[] = [];
-  let nextPageToken: string | undefined;
-  const seenTokens = new Set<string>();
+  /** Ambil semua issue untuk satu JQL, ikuti nextPageToken sampai habis. */
+  async function search(q: string): Promise<JiraIssue[]> {
+    const out: JiraIssue[] = [];
+    let token: string | undefined;
+    const seenTokens = new Set<string>();
 
-  try {
     for (let page = 0; page < 20; page++) {
       const res = await fetch(`${JIRA_BASE_URL}/rest/api/3/search/jql`, {
-        method: "POST", // POST biar JQL panjang nggak perlu di-URL-encode
-        headers: {
-          Authorization: `Basic ${auth}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jql,
-          fields: fieldList,
-          maxResults: 100,
-          ...(nextPageToken ? { nextPageToken } : {}),
-        }),
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ jql: q, fields: fieldList, maxResults: 100, ...(token ? { nextPageToken: token } : {}) }),
         cache: "no-store",
       });
-
-      if (!res.ok) {
-        const msg = await res.text();
-        return NextResponse.json(
-          { error: `Jira menolak permintaan (${res.status}). Cek JQL / API token. ${msg.slice(0, 200)}` },
-          { status: 400 }
-        );
-      }
+      if (!res.ok) throw new Error(`Jira menolak permintaan (${res.status}). ${(await res.text()).slice(0, 200)}`);
 
       const json = await res.json();
       const batch: JiraIssue[] = json.issues ?? [];
-      issues.push(...batch);
+      out.push(...batch);
 
-      nextPageToken = json.nextPageToken;
-      if (!nextPageToken || json.isLast === true || batch.length === 0) break;
-
-      // Pengaman: endpoint ini punya bug yang bisa mengembalikan token berulang
-      // dan bikin loop tak berujung. Kalau token sudah pernah kelihatan, berhenti.
-      if (seenTokens.has(nextPageToken)) break;
-      seenTokens.add(nextPageToken);
+      token = json.nextPageToken;
+      if (!token || json.isLast === true || batch.length === 0) break;
+      // Pengaman: endpoint ini punya bug yang bisa mengulang token dan bikin loop tak berujung.
+      if (seenTokens.has(token)) break;
+      seenTokens.add(token);
     }
-  } catch (e: any) {
-    return NextResponse.json({ error: `Tidak bisa menghubungi Jira: ${e.message}` }, { status: 502 });
+
+    const seen = new Set<string>();
+    return out.filter((i) => (seen.has(i.key) ? false : (seen.add(i.key), true)));
   }
 
-  // Buang duplikat kalau paginasi sempat mengulang halaman yang sama.
-  const seenKeys = new Set<string>();
-  const unique = issues.filter((i) => (seenKeys.has(i.key) ? false : (seenKeys.add(i.key), true)));
-  issues.length = 0;
-  issues.push(...unique);
+  let issues: JiraIssue[];
+  try {
+    issues = await search(jql);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 });
+  }
 
   const db = adminClient();
-  const epicIssues = issues.filter((i) => i.fields.issuetype?.name === "Epic");
-  const storyIssues = issues.filter((i) => i.fields.issuetype?.name !== "Epic");
+  const storyIssues = issues.filter((i) => !isEpicType(i.fields.issuetype));
 
-  /* ---------- epics: hanya nama & key, status/tanggal tetap milik lu ---------- */
+  /* ---------------------------------------------------------------
+     Epic dikumpulkan dari DUA sumber:
+     1. issue bertipe Epic yang kebetulan ikut di hasil JQL
+     2. field `parent` milik tiap story — Jira ikut mengirim
+        parent.fields.summary, jadi nama epic-nya sudah di tangan.
+     Sumber kedua ini yang penting: JQL lu biasanya cuma narik story,
+     jadi tanpa ini tabel epic bakal kosong dan story jadi yatim.
+  --------------------------------------------------------------- */
+  const epicNames = new Map<string, string>(); // jira_key -> nama
+
+  issues.filter((i) => isEpicType(i.fields.issuetype)).forEach((i) => epicNames.set(i.key, i.fields.summary));
+
+  const epicKeyOf = (f: Record<string, any>): string | undefined => {
+    if (f.parent?.key && isEpicType(f.parent.fields?.issuetype)) return f.parent.key;
+    if (epicLinkField && f[epicLinkField]) return String(f[epicLinkField]);
+    return undefined;
+  };
+
+  const namelessKeys = new Set<string>();
+  storyIssues.forEach((i) => {
+    const key = epicKeyOf(i.fields);
+    if (!key || epicNames.has(key)) return;
+    const summary = i.fields.parent?.fields?.summary;
+    if (summary) epicNames.set(key, summary);
+    else namelessKeys.add(key); // dari Epic Link lama: cuma dapat key, namanya perlu diambil terpisah
+  });
+
+  // Satu request tambahan untuk mengambil nama epic yang belum ketahuan.
+  if (namelessKeys.size) {
+    try {
+      const found = await search(`key in (${Array.from(namelessKeys).join(",")})`);
+      found.forEach((i) => epicNames.set(i.key, i.fields.summary));
+    } catch {
+      namelessKeys.forEach((k) => epicNames.set(k, k)); // fallback: pakai key sebagai nama sementara
+    }
+  }
+
   let epicCount = 0;
-  if (epicIssues.length) {
-    const rows = epicIssues.map((i) => ({ jira_key: i.key, name: i.fields.summary as string }));
+  if (epicNames.size) {
+    const rows = Array.from(epicNames, ([jira_key, name]) => ({ jira_key, name }));
     const { error } = await db.from("epics").upsert(rows, { onConflict: "jira_key" });
     if (error) return NextResponse.json({ error: "Gagal simpan epic: " + error.message }, { status: 500 });
     epicCount = rows.length;
@@ -143,19 +171,20 @@ export async function POST(req: Request) {
 
   /* ---------- stories ---------- */
   let storyCount = 0;
+  let unlinked = 0;
+
   if (storyIssues.length) {
     const rows = storyIssues.map((i) => {
       const f = i.fields;
       const sprints: any[] = Array.isArray(f[sprintField]) ? f[sprintField] : [];
       const last = sprints[sprints.length - 1];
       const prev = existingByKey.get(i.key);
-      const parentKey: string | undefined = f.parent?.key;
 
       const row: Record<string, unknown> = {
         jira_key: i.key,
         title: f.summary,
         story_points: Number(f[spField]) || 0,
-        sprint: last?.id ? Number(last.name?.match(/\d+/)?.[0] ?? last.id) : null,
+        sprint: last ? Number(String(last.name ?? "").match(/\d+/)?.[0] ?? last.id) : null,
         jira_status: f.status?.name ?? "",
         synced_at: new Date().toISOString(),
       };
@@ -164,10 +193,11 @@ export async function POST(req: Request) {
       if (last?.startDate) row.start_date = String(last.startDate).slice(0, 10);
       if (last?.endDate) row.end_date = String(last.endDate).slice(0, 10);
 
-      // Epic hanya di-set kalau ketemu; kalau lu sudah assign manual, biarkan.
-      const epicId = parentKey ? epicIdByKey.get(parentKey) : undefined;
+      const key = epicKeyOf(f);
+      const epicId = key ? epicIdByKey.get(key) : undefined;
       if (epicId) row.epic_id = epicId;
-      else if (prev?.epic_id) row.epic_id = prev.epic_id;
+      else if (prev?.epic_id) row.epic_id = prev.epic_id; // sudah di-assign manual, jangan dilepas
+      else unlinked += 1;
 
       if (overwriteProgress) row.progress = mapProgress(f.status?.statusCategory?.key);
       else if (prev) row.progress = prev.progress;
@@ -185,8 +215,14 @@ export async function POST(req: Request) {
     epics_upsert: epicCount,
     stories_upsert: storyCount,
     status: "ok",
-    message: `${issues.length} issue diproses`,
+    message: `${issues.length} issue diproses, ${unlinked} story tanpa epic`,
   });
 
-  return NextResponse.json({ ok: true, epics: epicCount, stories: storyCount, total: issues.length });
+  return NextResponse.json({
+    ok: true,
+    epics: epicCount,
+    stories: storyCount,
+    total: issues.length,
+    unlinked,
+  });
 }

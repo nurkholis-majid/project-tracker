@@ -228,14 +228,28 @@ export const Td = ({ children, className = "" }: { children?: ReactNode; classNa
 );
 
 /**
- * `scroll` membuat isi tabel bisa di-scroll sendiri, sehingga header tabel
- * (yang sticky) tetap terlihat tanpa bergantung pada tinggi header halaman.
+ * `scroll` membuat isi tabel di-scroll sendiri, sehingga header tabel (yang sticky)
+ * tetap terlihat. Tingginya mengikuti sisa layar — bukan 70vh — supaya tabel tidak
+ * berhenti di tengah dan menyisakan ruang kosong di bawahnya.
+ *
+ * `offset` = perkiraan tinggi yang sudah terpakai di atas tabel (header halaman,
+ * kartu metrik, dsb). Kartu tetap menyusut kalau isinya sedikit.
  */
-export const Card = ({ children, scroll }: { children: ReactNode; scroll?: boolean }) => (
-  <div className={`rounded-2xl border border-mist-200 bg-white shadow-card ${scroll ? "max-h-[70vh] overflow-auto" : "overflow-x-auto"}`}>
+export const Card = ({
+  children, scroll, offset = "13rem",
+}: { children: ReactNode; scroll?: boolean; offset?: string }) => (
+  <div
+    className={`rounded-2xl border border-mist-200 bg-white shadow-card ${
+      scroll ? "min-h-[16rem] overflow-auto" : "overflow-x-auto"
+    }`}
+    style={scroll ? { maxHeight: `calc(100dvh - ${offset})` } : undefined}
+  >
     {children}
   </div>
 );
+
+/** Baris tabel: garis pemisah + sorotan jelas saat kursor lewat. */
+export const ROW = "transition-colors hover:bg-sky-200/70";
 
 export const EmptyRow = ({ cols, msg, icon = "🗂️" }: { cols: number; msg: string; icon?: string }) => (
   <tr>

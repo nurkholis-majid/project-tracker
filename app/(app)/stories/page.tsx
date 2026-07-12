@@ -6,7 +6,7 @@ import { fmt, num } from "@/lib/kpi";
 import { RELEASE_STATUS, STORY_PROGRESS, type Story } from "@/lib/types";
 import {
   Badge, Btn, Card, EmptyRow, ErrorBar, Field, FormActions, JiraLink, Loading, Modal,
-  PageHead, Progress, RowActions, Select, StatusSelect, Td, Th, filterCls, inputCls, optionsOf,
+  PageHead, Progress, ROW, RowActions, Select, StatusSelect, Td, Th, filterCls, inputCls, optionsOf,
 } from "@/components/ui";
 
 type SortKey = "epic" | "sprint" | "point" | "judul";
@@ -28,6 +28,10 @@ const bySprintDesc = (a: Story, b: Story) => {
   return num(b.sprint) - num(a.sprint) || RANK[a.progress] - RANK[b.progress];
 };
 
+/** DLB-6867 sebelum DLB-24511: dibandingkan sebagai angka, bukan teks. */
+const keyNo = (s: Story) => num(s.jira_key?.split("-")[1]) || Number.MAX_SAFE_INTEGER;
+const byJiraKey = (a: Story, b: Story) => keyNo(a) - keyNo(b);
+
 const blank = (): Partial<Story> => ({
   epic_id: null, task_group: "", title: "", jira_key: "", story_points: 0,
   sprint: null, start_date: null, end_date: null, progress: "Todo",
@@ -38,12 +42,15 @@ export default function StoriesPage() {
   const { data, loading, error, save, remove, patch } = useTracker();
   const [epicF, setEpicF] = useState("all");
   const [progF, setProgF] = useState("all");
-  const [sort, setSort] = useState<SortKey>("epic");
+  const [sort, setSort] = useState<SortKey>("sprint");
   const [q, setQ] = useState("");
   const [form, setForm] = useState<Partial<Story> | null>(null);
   const [closed, setClosed] = useState<Set<string>>(new Set());
 
   const epicById = useMemo(() => Object.fromEntries(data.epics.map((e) => [e.id, e])), [data.epics]);
+
+  /** true kalau sedang difilter ke satu epic tertentu. */
+  const single = epicF !== "all" && epicF !== "none";
 
   const filtered = useMemo(
     () =>
@@ -73,17 +80,22 @@ export default function StoriesPage() {
       .map(([id, list]) => ({
         id,
         epic: epicById[id],
-        stories: [...list].sort((a, b) => RANK[a.progress] - RANK[b.progress] || bySprintDesc(a, b)),
+        // Saat sudah difilter ke satu epic, urutan nomor tiket lebih berguna
+        // daripada urutan progress — story-nya memang dibaca berurutan.
+        stories: [...list].sort(
+          single ? byJiraKey : (a, b) => RANK[a.progress] - RANK[b.progress] || bySprintDesc(a, b)
+        ),
       }));
-  }, [filtered, epicById]);
+  }, [filtered, epicById, single]);
 
   const flat = useMemo(() => {
     const list = [...filtered];
+    if (single) return list.sort(byJiraKey);
     if (sort === "sprint") list.sort(bySprintDesc);
     if (sort === "point") list.sort((a, b) => RANK[a.progress] - RANK[b.progress] || num(b.story_points) - num(a.story_points));
     if (sort === "judul") list.sort((a, b) => a.title.localeCompare(b.title));
     return list;
-  }, [filtered, sort]);
+  }, [filtered, sort, single]);
 
   if (loading) return <Loading />;
 
@@ -107,7 +119,7 @@ export default function StoriesPage() {
   };
 
   const Row = ({ s }: { s: Story }) => (
-    <tr className={`hover:bg-sky-100/40 ${s.progress === "Done" ? "bg-mist-50/60" : ""}`}>
+    <tr className={`${ROW} ${s.progress === "Done" ? "bg-mist-50/60" : ""}`}>
       <Td className={s.progress === "Done" ? "text-mist-600" : "text-ink-900"}>{s.title}</Td>
       <Td><JiraLink k={s.jira_key} /></Td>
       <Td className="text-right font-mono text-xs">{s.story_points || "—"}</Td>
@@ -164,12 +176,17 @@ export default function StoriesPage() {
         <Select w="w-40" value={progF} onChange={setProgF}
           options={[{ value: "all", label: "Semua progress" }, ...optionsOf(STORY_PROGRESS)]} />
         <Select w="w-48" value={sort} onChange={(v) => setSort(v as SortKey)} options={SORTS} />
+        {single && (
+          <span className="rounded-full bg-mist-100 px-3 py-1.5 text-xs text-mist-600">
+            Diurutkan per nomor Jira
+          </span>
+        )}
         <Btn tone="accent" onClick={() => setForm(blank())}>+ Story</Btn>
       </PageHead>
 
       <ErrorBar msg={error} />
 
-      <Card scroll>
+      <Card scroll offset="12rem">
         <table className="w-full border-collapse">
           <thead>{HEAD}</thead>
           <tbody>

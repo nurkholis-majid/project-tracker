@@ -5,7 +5,7 @@ import { useTracker } from "@/lib/useTracker";
 import type { Epic, Flag } from "@/lib/types";
 import {
   Badge, Btn, Card, EmptyRow, ErrorBar, Field, FormActions, JiraLink, Loading, Modal,
-  PageHead, RowActions, Select, Td, Th, inputCls,
+  PageHead, ROW, RowActions, Select, Td, Th, inputCls,
 } from "@/components/ui";
 
 /** TRUE → FALSE → belum dipasang (null) → TRUE … */
@@ -81,7 +81,7 @@ export default function FlagsPage() {
 
       <ErrorBar msg={error} />
 
-      <Card scroll>
+      <Card scroll offset="12rem">
         <table className="w-full border-collapse">
           <thead>
             <tr>
@@ -97,7 +97,7 @@ export default function FlagsPage() {
           </thead>
           <tbody>
             {rows.map((f) => (
-              <tr key={f.id} className="hover:bg-sky-100/40">
+              <tr key={f.id} className={ROW}>
                 <Td className="font-mono text-xs font-medium text-ink-900">{f.name}</Td>
                 <Td>
                   <div className="flex flex-wrap gap-1">

@@ -6,7 +6,7 @@ import { fmt, num } from "@/lib/kpi";
 import { RELEASE_STATUS, type Story } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import {
-  Badge, Btn, Card, EmptyRow, ErrorBar, JiraLink, Loading, Metric, PageHead, Select,
+  Badge, Btn, Card, EmptyRow, ErrorBar, JiraLink, Loading, Metric, PageHead, ROW, Select,
   StatusSelect, Td, Th, filterCls,
 } from "@/components/ui";
 
@@ -128,7 +128,7 @@ export default function DeployPage() {
         </div>
       )}
 
-      <Card scroll>
+      <Card scroll offset="22rem">
         <table className="w-full border-collapse">
           <thead>
             <tr>
@@ -148,7 +148,7 @@ export default function DeployPage() {
           </thead>
           <tbody>
             {rows.map((s) => (
-              <tr key={s.id} className={picked.has(s.id) ? "bg-sky-100/60" : "hover:bg-sky-100/40"}>
+              <tr key={s.id} className={picked.has(s.id) ? "bg-sky-200/70" : ROW}>
                 <Td>
                   <input type="checkbox" checked={picked.has(s.id)} onChange={() => toggle(s.id)}
                     className="h-4 w-4 accent-ocean-600" />

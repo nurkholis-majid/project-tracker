@@ -6,7 +6,7 @@ import { useTracker } from "@/lib/useTracker";
 import { computeKpi, currentSemester, epicStats, epicWindow, fmt, num } from "@/lib/kpi";
 import type { Story } from "@/lib/types";
 import {
-  Badge, Card, EmptyRow, ErrorBar, JiraLink, Label, Loading, Metric, PageHead, Progress, Td, Th,
+  Badge, Card, EmptyRow, ErrorBar, JiraLink, Label, Loading, Metric, PageHead, Progress, ROW, Td, Th,
 } from "@/components/ui";
 
 export default function OverviewPage() {
@@ -195,7 +195,7 @@ export default function OverviewPage() {
         <section className="lg:col-span-2 space-y-5">
           <div>
             <h2 className="mb-2 text-base font-semibold">📦 Epic yang belum selesai</h2>
-            <Card scroll>
+            <Card scroll offset="26rem">
               <table className="w-full border-collapse">
                 <thead>
                   <tr>
@@ -211,7 +211,7 @@ export default function OverviewPage() {
                     const st = stats[e.id];
                     const pct = st?.points ? Math.round((st.donePoints / st.points) * 100) : 0;
                     return (
-                      <tr key={e.id} className="hover:bg-sky-100/40">
+                      <tr key={e.id} className={ROW}>
                         <Td>
                           <Link href="/epics" className="font-medium text-ink-900 hover:text-ocean-600 hover:underline">
                             {e.name}
@@ -240,7 +240,7 @@ export default function OverviewPage() {
 
           <div>
             <h2 className="mb-2 text-base font-semibold">🚀 Antre release</h2>
-            <Card scroll>
+            <Card scroll offset="26rem">
               <table className="w-full border-collapse">
                 <thead>
                   <tr>
@@ -253,7 +253,7 @@ export default function OverviewPage() {
                 </thead>
                 <tbody>
                   {pipeline.map((p) => (
-                    <tr key={p.version} className="hover:bg-sky-100/40">
+                    <tr key={p.version} className={ROW}>
                       <Td className="font-mono font-semibold text-ink-900">v{p.version}</Td>
                       <Td className="font-mono text-xs">{fmt(p.deploy)}</Td>
                       <Td className="text-right font-mono text-xs">{p.stories.length}</Td>

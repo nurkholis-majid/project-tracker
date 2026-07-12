@@ -7,7 +7,7 @@ import { EPIC_STATUS, STORY_PROGRESS, labelOf, type Epic, type Story } from "@/l
 import { epicWindow } from "@/lib/kpi";
 import {
   Badge, Btn, Card, EmptyRow, ErrorBar, Field, FormActions, JiraLink, Loading, Modal,
-  PageHead, Progress, RowActions, Select, StatusSelect, Td, Th, inputCls, optionsOf,
+  PageHead, Progress, ROW, RowActions, Select, StatusSelect, Td, Th, inputCls, optionsOf,
 } from "@/components/ui";
 
 type SortKey = "baru" | "nama" | "point" | "deadline";
@@ -78,7 +78,7 @@ export default function EpicsPage() {
 
       <ErrorBar msg={error} />
 
-      <Card scroll>
+      <Card scroll offset="12rem">
         <table className="w-full border-collapse">
           <thead>
             <tr>
@@ -98,7 +98,7 @@ export default function EpicsPage() {
               const pct = st.points ? Math.round((st.donePoints / st.points) * 100) : 0;
               const win = epicWindow(e, data.stories);
               return (
-                <tr key={e.id} className="group hover:bg-sky-100/40">
+                <tr key={e.id} className={`group ${ROW}`}>
                   <Td>
                     <button
                       onClick={() => setDetail(e)}
@@ -280,7 +280,7 @@ function EpicDetail({
             </thead>
             <tbody>
               {sorted.map((s) => (
-                <tr key={s.id} className={s.progress === "Done" ? "opacity-60" : ""}>
+                <tr key={s.id} className={`${ROW} ${s.progress === "Done" ? "bg-mist-50/60" : ""}`}>
                   <Td className="text-ink-900">{s.title}</Td>
                   <Td><JiraLink k={s.jira_key} /></Td>
                   <Td className="text-right font-mono text-xs">{s.story_points || "—"}</Td>

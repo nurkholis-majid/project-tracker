@@ -3,9 +3,15 @@
 @tailwind utilities;
 
 html { -webkit-font-smoothing: antialiased; }
-body { @apply bg-slate-100 text-slate-900; }
+body { @apply bg-paper text-ink-900; }
 
-:focus-visible { @apply outline-none ring-2 ring-amber-500 ring-offset-1; }
+::selection { @apply bg-sky-200 text-ink-900; }
+
+:focus-visible { @apply outline-none ring-2 ring-sun-500 ring-offset-2 ring-offset-white; }
+
+/* Scrollbar tipis untuk nav horizontal di mobile. */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

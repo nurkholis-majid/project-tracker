@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LSS Delivery Tracker",
-  description: "Dokumentasi delivery squad LSS — epic, story, release, feature flag, rekap KPI semester.",
+  title: "Project Tracker",
+  description: "Epic, story, release, dan dokumennya — dalam satu tempat.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

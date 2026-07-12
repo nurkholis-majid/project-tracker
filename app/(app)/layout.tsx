@@ -5,13 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const NAV = [
-  { href: "/", label: "Overview", hint: "Kondisi hari ini" },
-  { href: "/recap", label: "Rekap Semester", hint: "KPI" },
-  { href: "/epics", label: "Epic / Project", hint: "" },
-  { href: "/stories", label: "Story", hint: "" },
-  { href: "/releases", label: "Release & Dokumen", hint: "" },
-  { href: "/flags", label: "Feature Flag", hint: "" },
-  { href: "/sync", label: "Jira Sync", hint: "" },
+  { href: "/",          icon: "🏠", label: "Overview" },
+  { href: "/recap",     icon: "🏆", label: "Rekap Semester" },
+  { href: "/epics",     icon: "📦", label: "Epic" },
+  { href: "/stories",   icon: "📝", label: "Story" },
+  { href: "/releases",  icon: "🚀", label: "Release & Dokumen" },
+  { href: "/flags",     icon: "🎚️", label: "Feature Flag" },
+  { href: "/sync",      icon: "🔄", label: "Jira Sync" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -25,39 +25,49 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
-      <aside className="shrink-0 bg-slate-900 lg:flex lg:w-60 lg:flex-col">
-        <div className="border-b border-slate-700 px-5 py-4">
-          <div className="font-mono text-xs tracking-widest text-amber-400">SQUAD LSS</div>
-          <div className="mt-0.5 text-lg font-semibold leading-tight text-white">Delivery Tracker</div>
+    <div className="min-h-screen lg:flex">
+      {/* Di layar kecil ini jadi header yang menempel di atas; di desktop jadi sidebar penuh.
+          Tombol Keluar ikut pindah ke header supaya tidak perlu scroll untuk menemukannya. */}
+      <aside className="sticky top-0 z-30 bg-ink-900 lg:h-screen lg:w-60 lg:shrink-0 lg:flex lg:flex-col">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 lg:block lg:px-5 lg:py-5">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-sun-500 text-sm">📊</span>
+            <span className="text-base font-semibold leading-tight text-white">Project Tracker</span>
+          </Link>
+          <button
+            onClick={signOut}
+            className="rounded-lg px-3 py-1.5 text-xs text-sky-400 hover:bg-ink-800 hover:text-white lg:hidden"
+          >
+            Keluar
+          </button>
         </div>
 
-        <nav className="flex overflow-x-auto p-2 lg:flex-1 lg:flex-col">
+        <nav className="no-scrollbar flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-1 lg:flex-col lg:overflow-visible lg:px-3">
           {NAV.map((n) => {
             const active = path === n.href;
             return (
               <Link
                 key={n.href}
                 href={n.href}
-                className={`flex w-full items-center justify-between gap-3 whitespace-nowrap rounded px-3 py-2 text-sm transition-colors ${
+                className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors ${
                   active
-                    ? "bg-slate-800 text-white"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    ? "bg-white/10 font-medium text-white"
+                    : "text-sky-200/70 hover:bg-white/5 hover:text-white"
                 }`}
               >
-                <span>{n.label}</span>
-                <span className="font-mono text-[10px] text-slate-500">{n.hint}</span>
+                <span className="text-base">{n.icon}</span>
+                {n.label}
               </Link>
             );
           })}
         </nav>
 
-        <div className="hidden border-t border-slate-800 p-2 lg:block">
+        <div className="hidden border-t border-white/10 p-3 lg:block">
           <button
             onClick={signOut}
-            className="w-full rounded px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+            className="w-full rounded-lg px-3 py-2 text-left text-sm text-sky-200/70 hover:bg-white/5 hover:text-white"
           >
-            Keluar
+            ↩︎ Keluar
           </button>
         </div>
       </aside>

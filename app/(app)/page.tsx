@@ -1,41 +1,83 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { useTracker } from "@/lib/useTracker";
-import { currentSemester, computeKpi, epicStats, fmt, num } from "@/lib/kpi";
-import { Badge, Card, ErrorBar, JiraLink, Loading, Metric, PageHead, Td, Th } from "@/components/ui";
-import { DOC_TYPES } from "@/lib/types";
+import { computeKpi, currentSemester, epicStats, fmt, num } from "@/lib/kpi";
+import { DOC_TYPES, type Story } from "@/lib/types";
+import {
+  Badge, Card, EmptyRow, ErrorBar, JiraLink, Label, Loading, Metric, PageHead, Progress, Td, Th,
+} from "@/components/ui";
 
 export default function OverviewPage() {
   const { data, loading, error } = useTracker();
+  const sem = currentSemester();
+  const kpi = useMemo(() => computeKpi(data, sem), [data, sem]);
+  const stats = useMemo(() => epicStats(data), [data]);
+
+  /* ---------- sprint aktif = sprint tertinggi yang masih punya story belum Done ---------- */
+  const sprintInfo = useMemo(() => {
+    const withSprint = data.stories.filter((s) => s.sprint != null);
+    if (!withSprint.length) return null;
+    const open = withSprint.filter((s) => s.progress !== "Done");
+    const current = Math.max(...(open.length ? open : withSprint).map((s) => s.sprint!));
+    const inSprint = withSprint.filter((s) => s.sprint === current);
+    const count = (p: Story["progress"]) => inSprint.filter((s) => s.progress === p).length;
+    const pts = inSprint.reduce((a, s) => a + num(s.story_points), 0);
+    const donePts = inSprint.filter((s) => s.progress === "Done").reduce((a, s) => a + num(s.story_points), 0);
+    return { current, todo: count("Todo"), dev: count("In Dev"), done: count("Done"), pts, donePts };
+  }, [data.stories]);
+
+  /* ---------- velocity: story point Done per sprint, 6 sprint terakhir ---------- */
+  const velocity = useMemo(() => {
+    const byS = new Map<number, number>();
+    data.stories
+      .filter((s) => s.sprint != null && s.progress === "Done")
+      .forEach((s) => byS.set(s.sprint!, (byS.get(s.sprint!) ?? 0) + num(s.story_points)));
+    const rows = Array.from(byS.entries()).sort((a, b) => a[0] - b[0]).slice(-6);
+    const max = Math.max(1, ...rows.map((r) => r[1]));
+    const avg = rows.length ? Math.round(rows.reduce((a, r) => a + r[1], 0) / rows.length) : 0;
+    return { rows, max, avg };
+  }, [data.stories]);
+
+  /* ---------- pipeline release: story yang nunggu rilis, dikelompokkan per fix version ---------- */
+  const pipeline = useMemo(() => {
+    const map = new Map<string, { version: string; deploy: string | null; stories: Story[] }>();
+    data.stories
+      .filter((s) => s.release_id && s.release_status !== "Deployed")
+      .forEach((s) => {
+        const r = data.releases.find((x) => x.id === s.release_id);
+        if (!r) return;
+        if (!map.has(r.id)) map.set(r.id, { version: r.fix_version, deploy: r.deploy_date, stories: [] });
+        map.get(r.id)!.stories.push(s);
+      });
+    return Array.from(map.values()).sort((a, b) => b.version.localeCompare(a.version));
+  }, [data.stories, data.releases]);
+
   if (loading) return <Loading />;
 
-  const sem = currentSemester();
-  const kpi = computeKpi(data, sem);
-  const stats = epicStats(data);
-
   const active = data.epics.filter((e) => e.status !== "Hold" && !e.end_date);
-  const inTesting = data.epics.filter((e) => e.status === "User Testing");
   const inDev = data.stories.filter((s) => s.progress === "In Dev");
-  const doneNoRelease = data.stories.filter((s) => s.progress === "Done" && !s.release_id);
 
-  // Hal yang biasanya kelewat waktu tutup semester:
-  const attention: { what: string; detail: string; href: string }[] = [];
+  /* ---------- backlog hygiene: yang biasanya baru ketahuan pas tutup semester ---------- */
+  const todo: { what: string; why: string; href: string; icon: string }[] = [];
 
   data.releases.forEach((r) => {
     const missing = DOC_TYPES.filter(
       (t) => t !== "Lainnya" && !data.docs.find((d) => d.release_id === r.id && d.doc_type === t && d.url)
     );
     if (missing.length)
-      attention.push({
+      todo.push({
+        icon: "📄",
         what: `v${r.fix_version} — dokumen belum lengkap`,
-        detail: `Kurang: ${missing.join(", ")}`,
+        why: `Belum ada: ${missing.join(", ")}`,
         href: "/releases",
       });
     if (!r.folder_url)
-      attention.push({
-        what: `v${r.fix_version} — folder SharePoint belum diisi`,
-        detail: "URL folder dipakai sebagai bukti deployment di KPI.",
+      todo.push({
+        icon: "🔗",
+        what: `v${r.fix_version} — folder SharePoint kosong`,
+        why: "Link folder ini jadi bukti deployment waktu review KPI.",
         href: "/releases",
       });
   });
@@ -43,9 +85,10 @@ export default function OverviewPage() {
   data.flags
     .filter((f) => f.uat === true && f.prod !== true)
     .forEach((f) =>
-      attention.push({
-        what: `${f.name} — sudah TRUE di UAT, belum di PROD`,
-        detail: "Pastikan flag dinyalakan saat release, atau catat kenapa ditahan.",
+      todo.push({
+        icon: "🎚️",
+        what: `${f.name} — TRUE di UAT, belum di PROD`,
+        why: "Nyalakan saat release, atau catat alasan kalau memang ditahan.",
         href: "/flags",
       })
     );
@@ -53,113 +96,219 @@ export default function OverviewPage() {
   data.epics
     .filter((e) => !e.start_date)
     .forEach((e) =>
-      attention.push({
+      todo.push({
+        icon: "🗓️",
         what: `${e.name} — start date kosong`,
-        detail: "Tanpa tanggal, epic ini tidak masuk hitungan semester manapun.",
+        why: "Tanpa tanggal, epic ini nggak masuk hitungan semester manapun.",
         href: "/epics",
       })
     );
 
-  if (doneNoRelease.length)
-    attention.push({
-      what: `${doneNoRelease.length} story sudah Done tapi belum masuk fix version`,
-      detail: "Assign ke release supaya kelihatan jejak deploy-nya.",
+  const orphan = data.stories.filter((s) => !s.epic_id).length;
+  if (orphan)
+    todo.push({
+      icon: "🧩",
+      what: `${orphan} story belum punya epic`,
+      why: "Story point-nya nggak kehitung ke epic manapun.",
+      href: "/stories",
+    });
+
+  const doneNoRelease = data.stories.filter((s) => s.progress === "Done" && !s.release_id).length;
+  if (doneNoRelease)
+    todo.push({
+      icon: "🚀",
+      what: `${doneNoRelease} story Done tapi belum masuk fix version`,
+      why: "Assign ke release supaya jejak deploy-nya kelihatan.",
       href: "/stories",
     });
 
   return (
     <div className="space-y-6">
+      <ErrorBar msg={error} />
+
       <PageHead
         title="Overview"
-        sub={`Kondisi squad hari ini. Untuk angka KPI ${sem.label}, buka Rekap Semester.`}
+        sub={`Kondisi delivery hari ini. Angka KPI Semester ${sem.half} ${sem.year} ada di menu Rekap Semester.`}
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Metric v={active.length} k="Project berjalan" />
-        <Metric v={inTesting.length} k="Menunggu user testing" />
-        <Metric v={inDev.length} k="Story in dev" />
-        <Metric v={kpi.pointsDone} k={`Point ${sem.label}`} accent />
-        <Metric v={kpi.releases.length} k="Release semester ini" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric v={active.length} k="Epic aktif" icon="📦" />
+        <Metric v={inDev.length} k="Story in dev" icon="🔨" />
+        <Metric v={kpi.epicsDone.length} k={`Epic done · S${sem.half}`} icon="🏆" accent />
+        <Metric v={velocity.avg} k="Avg velocity / sprint" icon="⚡" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <section className="lg:col-span-2">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-widest text-slate-500">
-            Project yang belum selesai
-          </h2>
-          <Card>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <Th>Epic</Th>
-                  <Th className="w-24">Jira</Th>
-                  <Th className="w-32">Status</Th>
-                  <Th className="w-28 text-right">Point</Th>
-                  <Th className="w-28">Mulai</Th>
-                  <Th className="w-32">Est. deploy</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {active.map((e) => {
-                  const st = stats[e.id];
-                  return (
-                    <tr key={e.id} className="hover:bg-slate-50">
-                      <Td className="font-medium text-slate-900">
-                        <Link href="/epics" className="hover:underline">
-                          {e.name}
-                        </Link>
-                      </Td>
-                      <Td>
-                        <JiraLink k={e.jira_key} />
-                      </Td>
-                      <Td>
-                        <Badge v={e.status} />
-                      </Td>
-                      <Td className="text-right font-mono text-xs">
-                        {num(st?.donePoints)}/{num(st?.points)}
-                      </Td>
-                      <Td className="font-mono text-xs">{fmt(e.start_date)}</Td>
-                      <Td className="font-mono text-xs">{fmt(e.est_deploy)}</Td>
-                    </tr>
-                  );
-                })}
-                {active.length === 0 && (
+      {/* Sprint aktif + velocity: dua hal yang paling sering ditanya waktu standup */}
+      <div className="grid gap-5 lg:grid-cols-3">
+        <section className="rounded-2xl border border-mist-200 bg-white p-5 shadow-card">
+          <Label>Sprint berjalan</Label>
+          {sprintInfo ? (
+            <>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-3xl font-semibold tabular-nums">Sprint {sprintInfo.current}</span>
+              </div>
+              <div className="mt-3">
+                <Progress pct={sprintInfo.pts ? (sprintInfo.donePts / sprintInfo.pts) * 100 : 0} />
+                <div className="mt-1.5 font-mono text-[11px] text-mist-600">
+                  {sprintInfo.donePts}/{sprintInfo.pts} point selesai
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3 text-xs text-ink-700">
+                <span>⚪ Todo <b className="font-mono">{sprintInfo.todo}</b></span>
+                <span>🔨 In Dev <b className="font-mono">{sprintInfo.dev}</b></span>
+                <span>✅ Done <b className="font-mono">{sprintInfo.done}</b></span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-mist-600">Belum ada story yang punya nomor sprint.</p>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-mist-200 bg-white p-5 shadow-card lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <Label>Velocity — story point Done per sprint</Label>
+            <span className="font-mono text-[11px] text-mist-600">rata-rata {velocity.avg} pt</span>
+          </div>
+
+          {velocity.rows.length ? (
+            <div className="mt-4 flex h-32 items-end gap-3">
+              {velocity.rows.map(([sprint, pts]) => (
+                <div key={sprint} className="flex flex-1 flex-col items-center gap-1">
+                  <span className="font-mono text-[11px] text-ink-700">{pts}</span>
+                  <div
+                    className="w-full rounded-t-md bg-ocean-600 transition-all hover:bg-sun-500"
+                    style={{ height: `${Math.max(6, (pts / velocity.max) * 100)}%` }}
+                    title={`Sprint ${sprint}: ${pts} point`}
+                  />
+                  <span className="font-mono text-[10px] text-mist-400">S{sprint}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-mist-600">
+              Belum ada story Done dengan nomor sprint. Tarik dari Jira dulu.
+            </p>
+          )}
+        </section>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <section className="lg:col-span-2 space-y-5">
+          <div>
+            <h2 className="mb-2 text-base font-semibold">📦 Epic yang belum selesai</h2>
+            <Card>
+              <table className="w-full border-collapse">
+                <thead>
                   <tr>
-                    <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-400">
-                      Semua epic sudah punya end date. Tambah epic baru di menu Epic / Project.
-                    </td>
+                    <Th>Epic</Th>
+                    <Th className="w-24">Jira</Th>
+                    <Th className="w-36">Status</Th>
+                    <Th className="w-36">Progress</Th>
+                    <Th className="w-32">Est. deploy</Th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </Card>
+                </thead>
+                <tbody>
+                  {active.map((e) => {
+                    const st = stats[e.id];
+                    const pct = st?.points ? Math.round((st.donePoints / st.points) * 100) : 0;
+                    return (
+                      <tr key={e.id} className="hover:bg-sky-100/40">
+                        <Td>
+                          <Link href="/epics" className="font-medium text-ink-900 hover:text-ocean-600 hover:underline">
+                            {e.name}
+                          </Link>
+                          <div className="text-xs text-mist-400">
+                            {num(st?.done)}/{num(st?.total)} story · {num(st?.donePoints)}/{num(st?.points)} pt
+                          </div>
+                        </Td>
+                        <Td><JiraLink k={e.jira_key} /></Td>
+                        <Td><Badge v={e.status} /></Td>
+                        <Td>
+                          <Progress pct={pct} />
+                          <div className="mt-1 font-mono text-[10px] text-mist-400">{pct}%</div>
+                        </Td>
+                        <Td className="font-mono text-xs">{fmt(e.est_deploy)}</Td>
+                      </tr>
+                    );
+                  })}
+                  {active.length === 0 && (
+                    <EmptyRow cols={5} icon="🎉" msg="Semua epic sudah punya end date." />
+                  )}
+                </tbody>
+              </table>
+            </Card>
+          </div>
+
+          <div>
+            <h2 className="mb-2 text-base font-semibold">🚀 Antre release</h2>
+            <Card>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr>
+                    <Th className="w-28">Fix version</Th>
+                    <Th className="w-32">Target deploy</Th>
+                    <Th className="w-24 text-right">Story</Th>
+                    <Th className="w-24 text-right">Point</Th>
+                    <Th>Status</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pipeline.map((p) => (
+                    <tr key={p.version} className="hover:bg-sky-100/40">
+                      <Td className="font-mono font-semibold text-ink-900">v{p.version}</Td>
+                      <Td className="font-mono text-xs">{fmt(p.deploy)}</Td>
+                      <Td className="text-right font-mono text-xs">{p.stories.length}</Td>
+                      <Td className="text-right font-mono text-xs">
+                        {p.stories.reduce((a, s) => a + num(s.story_points), 0)}
+                      </Td>
+                      <Td>
+                        <div className="flex flex-wrap gap-1">
+                          {Array.from(new Set(p.stories.map((s) => s.release_status))).map((st) => (
+                            <Badge key={st} v={st} />
+                          ))}
+                        </div>
+                      </Td>
+                    </tr>
+                  ))}
+                  {pipeline.length === 0 && (
+                    <EmptyRow cols={5} icon="🚀" msg="Nggak ada story yang lagi nunggu release." />
+                  )}
+                </tbody>
+              </table>
+            </Card>
+          </div>
         </section>
 
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-widest text-slate-500">
-            Perlu dibereskan
+          <h2 className="mb-2 text-base font-semibold">
+            🧹 Perlu dibereskan {todo.length > 0 && <span className="text-mist-400">({todo.length})</span>}
           </h2>
           <div className="space-y-2">
-            {attention.slice(0, 12).map((a, i) => (
+            {todo.slice(0, 12).map((t, i) => (
               <Link
                 key={i}
-                href={a.href}
-                className="block rounded-lg border border-slate-200 bg-white p-3 hover:border-amber-300"
+                href={t.href}
+                className="block rounded-xl border border-mist-200 bg-white p-3 shadow-card transition hover:border-sun-300"
               >
-                <div className="text-sm font-medium text-slate-900">{a.what}</div>
-                <div className="mt-0.5 text-xs text-slate-500">{a.detail}</div>
+                <div className="flex gap-2">
+                  <span>{t.icon}</span>
+                  <div>
+                    <div className="text-sm font-medium text-ink-900">{t.what}</div>
+                    <div className="mt-0.5 text-xs text-mist-600">{t.why}</div>
+                  </div>
+                </div>
               </Link>
             ))}
-            {attention.length === 0 && (
-              <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-400">
-                Bersih. Dokumen release lengkap dan semua epic punya tanggal.
+            {todo.length === 0 && (
+              <div className="rounded-xl border border-dashed border-mist-200 bg-white p-6 text-center">
+                <div className="text-2xl">✨</div>
+                <p className="mt-2 text-sm text-mist-600">Bersih — dokumen lengkap, tanggal terisi, flag konsisten.</p>
               </div>
             )}
+            {todo.length > 12 && <p className="px-1 text-xs text-mist-400">+{todo.length - 12} lagi</p>}
           </div>
         </section>
       </div>
-
-      <ErrorBar msg={error} />
     </div>
   );
 }

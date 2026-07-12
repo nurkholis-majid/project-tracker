@@ -17,46 +17,42 @@ export default function LoginPage() {
     setError("");
     const { error } = await supabase().auth.signInWithPassword({ email, password });
     setBusy(false);
-    if (error) {
-      setError("Email atau password salah.");
-      return;
-    }
+    if (error) return setError("Email atau password salah.");
     router.push("/");
     router.refresh();
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-900 p-4">
-      <div className="w-full max-w-sm rounded-lg bg-white p-8">
-        <div className="font-mono text-xs tracking-widest text-amber-600">SQUAD LSS</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Delivery Tracker</h1>
-        <p className="mt-1 text-sm text-slate-500">Masuk pakai akun tim.</p>
+    <main className="flex min-h-screen items-center justify-center bg-ink-900 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-card">
+        <div className="flex items-center gap-2">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-sun-500 text-base">📊</span>
+          <h1 className="text-xl font-semibold tracking-tight">Project Tracker</h1>
+        </div>
+        <p className="mt-2 text-sm text-mist-600">
+          Epic, story, release, dan dokumennya — dalam satu tempat.
+        </p>
 
         <div className="mt-6 space-y-4">
           <Field label="Email">
-            <input
-              className={inputCls}
-              type="email"
-              value={email}
+            <input className={inputCls} type="email" value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && signIn()}
-            />
+              onKeyDown={(e) => e.key === "Enter" && signIn()} />
           </Field>
           <Field label="Password">
-            <input
-              className={inputCls}
-              type="password"
-              value={password}
+            <input className={inputCls} type="password" value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && signIn()}
-            />
+              onKeyDown={(e) => e.key === "Enter" && signIn()} />
           </Field>
-          {error && <p className="text-sm text-rose-600">{error}</p>}
-          <Btn tone="solid" onClick={signIn} disabled={busy} className="w-full">
-            {busy ? "Memproses…" : "Masuk"}
+
+          {error && <p className="rounded-lg bg-alert-100 px-3 py-2 text-sm text-alert-600">⚠️ {error}</p>}
+
+          <Btn tone="accent" onClick={signIn} disabled={busy} className="w-full">
+            {busy ? "Sebentar…" : "Masuk"}
           </Btn>
-          <p className="text-xs text-slate-400">
-            Belum punya akun? Minta admin Supabase menambahkan lewat Authentication → Users.
+
+          <p className="text-xs text-mist-400">
+            Belum punya akun? Minta admin nambahin lewat dashboard Supabase.
           </p>
         </div>
       </div>

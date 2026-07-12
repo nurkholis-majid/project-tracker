@@ -4,16 +4,48 @@ import { JIRA_BROWSE, META, labelOf } from "@/lib/types";
 import { useEffect, type ReactNode } from "react";
 
 /* ---------------------------------------------------------------- badge */
-export function Badge({ v, onClick }: { v?: string | null; onClick?: () => void }) {
+export function Badge({ v }: { v?: string | null }) {
   const key = v ?? "-";
   const m = META[key] ?? { label: key, icon: "•", tone: "bg-mist-100 text-ink-700 ring-mist-200" };
-  const cls = `inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${m.tone}`;
-
-  if (!onClick) return <span className={cls}>{m.icon} {m.label}</span>;
   return (
-    <button onClick={onClick} className={cls + " transition hover:brightness-95"} title="Klik untuk ganti">
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${m.tone}`}>
       {m.icon} {m.label}
-    </button>
+    </span>
+  );
+}
+
+/**
+ * Dropdown yang tampil seperti badge — bisa langsung pilih status apa pun,
+ * tanpa harus klik berkali-kali untuk memutar nilainya.
+ */
+export function StatusSelect({
+  value, options, onChange, className = "",
+}: {
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+  className?: string;
+}) {
+  const m = META[value] ?? { icon: "•", tone: "bg-mist-100 text-ink-700 ring-mist-200" };
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`cursor-pointer appearance-none rounded-full py-1 pl-2 pr-6 text-xs font-medium ring-1 ring-inset transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-sun-500 ${m.tone} ${className}`}
+      style={{
+        backgroundImage:
+          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='%234B5190' d='M3 4.5 6 8l3-3.5z'/%3E%3C/svg%3E\")",
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "right 4px center",
+        backgroundSize: "12px",
+      }}
+    >
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {META[o]?.icon} {labelOf(o)}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -30,8 +62,14 @@ export const Label = ({ children }: { children: ReactNode }) => (
   <div className="text-[10px] font-semibold uppercase tracking-widest text-mist-600">{children}</div>
 );
 
-export const inputCls =
-  "w-full rounded-lg border border-mist-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder:text-mist-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200";
+/** Dasar kontrol form. Lebar TIDAK dipaksa penuh — biar bisa diatur per pemakaian. */
+const controlBase =
+  "rounded-lg border border-mist-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder:text-mist-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200";
+
+/** Untuk field di dalam form (selalu selebar kolomnya). */
+export const inputCls = `w-full ${controlBase}`;
+/** Untuk filter di toolbar (lebar mengikuti isi, tidak melar). */
+export const filterCls = controlBase;
 
 export function Btn({
   children, onClick, tone = "ghost", type = "button", disabled, className = "",
@@ -54,7 +92,7 @@ export function Btn({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-lg px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone]} ${className}`}
+      className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone]} ${className}`}
     >
       {children}
     </button>
@@ -69,17 +107,22 @@ export const Field = ({ label, hint, children }: { label: string; hint?: string;
   </div>
 );
 
-/** Dropdown dengan label ramah. Nilai yang dikirim tetap nilai mentah database. */
+/** Dropdown biasa. `w` mengatur lebarnya; default mengikuti isi. */
 export function Select({
-  value, onChange, options, className = "",
+  value, onChange, options, w = "w-auto", full,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
-  className?: string;
+  w?: string;
+  full?: boolean;
 }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls + " " + className}>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${full ? "w-full" : w} ${controlBase}`}
+    >
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>
       ))}
@@ -87,11 +130,10 @@ export function Select({
   );
 }
 
-/** Opsi dropdown dari daftar status mentah, otomatis pakai label + simbol. */
 export const optionsOf = (values: readonly string[]) =>
   values.map((v) => ({ value: v, label: `${META[v]?.icon ?? ""} ${labelOf(v)}`.trim() }));
 
-/** Pilihan pendek (2–4 opsi) — lebih cepat dipilih daripada dropdown. */
+/** Pilihan pendek (2–4 opsi) — satu klik, tanpa buka dropdown. */
 export function Segmented({
   value, onChange, options,
 }: {
@@ -107,7 +149,7 @@ export function Segmented({
           <button
             key={o.value}
             onClick={() => onChange(o.value)}
-            className={`rounded-lg px-3 py-1.5 text-sm transition ${
+            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition ${
               on ? "bg-ocean-600 font-semibold text-white shadow-sm" : "text-ink-700 hover:bg-mist-50"
             }`}
           >
@@ -119,48 +161,26 @@ export function Segmented({
   );
 }
 
-/** Penggeser angka (mis. tahun) — dua klik, tanpa buka dropdown. */
 export function Stepper({
   value, onChange, min, max,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  min: number;
-  max: number;
-}) {
+}: { value: number; onChange: (v: number) => void; min: number; max: number }) {
   return (
     <div className="inline-flex items-center rounded-xl border border-mist-200 bg-white shadow-card">
-      <button
-        onClick={() => value > min && onChange(value - 1)}
-        disabled={value <= min}
-        className="rounded-l-xl px-3 py-1.5 text-ink-500 hover:bg-mist-50 disabled:opacity-30"
-        aria-label="Tahun sebelumnya"
-      >
-        ‹
-      </button>
+      <button onClick={() => value > min && onChange(value - 1)} disabled={value <= min}
+        className="rounded-l-xl px-3 py-1.5 text-ink-500 hover:bg-mist-50 disabled:opacity-30" aria-label="Sebelumnya">‹</button>
       <span className="min-w-[3.5rem] px-2 text-center font-mono text-sm font-semibold tabular-nums">{value}</span>
-      <button
-        onClick={() => value < max && onChange(value + 1)}
-        disabled={value >= max}
-        className="rounded-r-xl px-3 py-1.5 text-ink-500 hover:bg-mist-50 disabled:opacity-30"
-        aria-label="Tahun berikutnya"
-      >
-        ›
-      </button>
+      <button onClick={() => value < max && onChange(value + 1)} disabled={value >= max}
+        className="rounded-r-xl px-3 py-1.5 text-ink-500 hover:bg-mist-50 disabled:opacity-30" aria-label="Berikutnya">›</button>
     </div>
   );
 }
 
+/* --------------------------------------------------------------- modal */
 export function Modal({
   title, subtitle, onClose, children, wide,
 }: {
-  title: string;
-  subtitle?: string;
-  onClose: () => void;
-  children: ReactNode;
-  wide?: boolean;
+  title: string; subtitle?: string; onClose: () => void; children: ReactNode; wide?: boolean;
 }) {
-  // Esc untuk menutup — kebiasaan standar, dan lebih cepat daripada mencari tombol ✕.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -168,26 +188,16 @@ export function Modal({
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/50 p-3 sm:p-6"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={`mt-4 w-full ${wide ? "max-w-4xl" : "max-w-xl"} rounded-2xl bg-white shadow-card`}
-      >
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/50 p-3 sm:p-6" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}
+        className={`mt-4 w-full ${wide ? "max-w-4xl" : "max-w-xl"} rounded-2xl bg-white shadow-card`}>
         <div className="flex items-start justify-between gap-4 border-b border-mist-200 px-5 py-4">
           <div>
             <h3 className="text-base font-semibold text-ink-900">{title}</h3>
             {subtitle && <p className="mt-0.5 text-xs text-mist-600">{subtitle}</p>}
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Tutup"
-            className="rounded-lg px-2 py-1 text-mist-400 hover:bg-mist-50 hover:text-ink-900"
-          >
-            ✕
-          </button>
+          <button onClick={onClose} aria-label="Tutup"
+            className="rounded-lg px-2 py-1 text-mist-400 hover:bg-mist-50 hover:text-ink-900">✕</button>
         </div>
         <div className="p-5">{children}</div>
       </div>
@@ -204,9 +214,9 @@ export const FormActions = ({ onClose, onSave, saveLabel = "Simpan" }: {
   </div>
 );
 
-/* ---------------------------------------------------------------- table */
+/* --------------------------------------------------------------- table */
 export const Th = ({ children, className = "" }: { children?: ReactNode; className?: string }) => (
-  <th className={`border-b border-mist-200 bg-mist-50 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-ink-700 ${className}`}>
+  <th className={`sticky top-0 z-10 border-b border-mist-200 bg-mist-100 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-ink-700 ${className}`}>
     {children}
   </th>
 );
@@ -217,8 +227,14 @@ export const Td = ({ children, className = "" }: { children?: ReactNode; classNa
   </td>
 );
 
-export const Card = ({ children }: { children: ReactNode }) => (
-  <div className="overflow-x-auto rounded-2xl border border-mist-200 bg-white shadow-card">{children}</div>
+/**
+ * `scroll` membuat isi tabel bisa di-scroll sendiri, sehingga header tabel
+ * (yang sticky) tetap terlihat tanpa bergantung pada tinggi header halaman.
+ */
+export const Card = ({ children, scroll }: { children: ReactNode; scroll?: boolean }) => (
+  <div className={`rounded-2xl border border-mist-200 bg-white shadow-card ${scroll ? "max-h-[70vh] overflow-auto" : "overflow-x-auto"}`}>
+    {children}
+  </div>
 );
 
 export const EmptyRow = ({ cols, msg, icon = "🗂️" }: { cols: number; msg: string; icon?: string }) => (
@@ -232,29 +248,21 @@ export const EmptyRow = ({ cols, msg, icon = "🗂️" }: { cols: number; msg: s
 
 export const RowActions = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) => (
   <div className="flex gap-1">
-    <button onClick={onEdit} title="Ubah" className="rounded-md px-2 py-1 text-xs text-mist-600 hover:bg-mist-50 hover:text-ocean-600">
-      ✏️
-    </button>
-    <button onClick={onDelete} title="Hapus" className="rounded-md px-2 py-1 text-xs text-mist-400 hover:bg-alert-100 hover:text-alert-600">
-      🗑️
-    </button>
+    <button onClick={onEdit} title="Ubah"
+      className="rounded-md px-2 py-1 text-xs text-mist-600 hover:bg-mist-50 hover:text-ocean-600">✏️</button>
+    <button onClick={onDelete} title="Hapus"
+      className="rounded-md px-2 py-1 text-xs text-mist-400 hover:bg-alert-100 hover:text-alert-600">🗑️</button>
   </div>
 );
 
-/** Satu sel bisa memuat beberapa key Jira, dipisah koma. */
 export function JiraLink({ k }: { k?: string | null }) {
   if (!k) return <span className="text-xs text-mist-400">—</span>;
   const keys = k.split(",").map((x) => x.trim()).filter(Boolean);
   return (
     <div className="flex flex-wrap gap-x-2 gap-y-0.5">
       {keys.map((key) => (
-        <a
-          key={key}
-          href={JIRA_BROWSE + key}
-          target="_blank"
-          rel="noreferrer"
-          className="font-mono text-xs text-ocean-600 underline decoration-ocean-200 underline-offset-2 hover:decoration-ocean-600"
-        >
+        <a key={key} href={JIRA_BROWSE + key} target="_blank" rel="noreferrer"
+          className="font-mono text-xs text-ocean-600 underline decoration-ocean-200 underline-offset-2 hover:decoration-ocean-600">
           {key}
         </a>
       ))}
@@ -262,14 +270,22 @@ export function JiraLink({ k }: { k?: string | null }) {
   );
 }
 
-export function PageHead({ title, sub, children }: { title: string; sub?: string; children?: ReactNode }) {
+/**
+ * Header halaman yang menempel saat di-scroll: judul, subjudul, dan toolbar filter
+ * tetap terlihat sampai ke baris terakhir tabel.
+ */
+export function PageHead({
+  title, sub, children,
+}: { title: string; sub?: string; children?: ReactNode }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink-900">{title}</h1>
-        {sub && <p className="mt-1 text-sm text-mist-600">{sub}</p>}
+    <header className="sticky top-0 z-20 -mx-4 mb-5 border-b border-mist-200 bg-paper/95 px-4 py-4 backdrop-blur lg:-mx-8 lg:px-8">
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-[16rem] flex-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink-900">{title}</h1>
+          {sub && <p className="mt-1 max-w-3xl text-sm text-mist-600">{sub}</p>}
+        </div>
+        {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
       </div>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
     </header>
   );
 }
@@ -281,9 +297,7 @@ export function Metric({ v, k, icon, accent }: { v: number | string; k: string; 
         <span className={`text-3xl font-semibold tabular-nums ${accent ? "text-sun-700" : "text-ink-900"}`}>{v}</span>
         {icon && <span className="text-lg">{icon}</span>}
       </div>
-      <div className={`mt-1 text-[10px] font-semibold uppercase tracking-widest ${accent ? "text-sun-700" : "text-mist-600"}`}>
-        {k}
-      </div>
+      <div className={`mt-1 text-[10px] font-semibold uppercase tracking-widest ${accent ? "text-sun-700" : "text-mist-600"}`}>{k}</div>
     </div>
   );
 }
@@ -297,14 +311,13 @@ export const Progress = ({ pct, tone = "bg-ocean-600" }: { pct: number; tone?: s
 export const ErrorBar = ({ msg }: { msg: string }) =>
   msg ? (
     <div className="mb-4 flex items-start gap-2 rounded-xl border border-alert-200 bg-alert-100 px-3 py-2 text-sm text-alert-600">
-      <span>⚠️</span>
-      <span>{msg}</span>
+      <span>⚠️</span><span>{msg}</span>
     </div>
   ) : null;
 
 export const Loading = () => (
   <div className="flex h-64 flex-col items-center justify-center gap-2 text-mist-400">
     <div className="h-6 w-6 animate-spin rounded-full border-2 border-mist-200 border-t-ocean-600" />
-    <p className="text-sm">Sebentar, lagi ngambil data…</p>
+    <p className="text-sm">Memuat data…</p>
   </div>
 );

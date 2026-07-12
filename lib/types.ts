@@ -2,11 +2,13 @@ export const EPIC_STATUS = ["Requirement", "Development", "User Testing", "Deplo
 export const STORY_PROGRESS = ["Todo", "In Dev", "Done"] as const;
 export const RELEASE_STATUS = ["-", "Merging to UAT", "Deployed"] as const;
 export const DOC_TYPES = ["TAT", "QCR", "DR", "Testing Result", "UAT Sign Off", "Lainnya"] as const;
+export const DEPLOY_STATUS = ["Planned", "Deployed"] as const;
 
 export type EpicStatus = (typeof EPIC_STATUS)[number];
 export type StoryProgress = (typeof STORY_PROGRESS)[number];
 export type ReleaseStatus = (typeof RELEASE_STATUS)[number];
 export type DocType = (typeof DOC_TYPES)[number];
+export type DeployStatus = (typeof DEPLOY_STATUS)[number];
 
 /**
  * Terminologi tetap istilah agile/PM standar — tim sudah paham, dan "User Testing"
@@ -25,6 +27,7 @@ export const META: Record<string, { label: string; icon: string; tone: string }>
   Done:             { label: "Done",            icon: "✅", tone: "bg-ocean-100 text-ocean-600 ring-ocean-200" },
 
   "-":              { label: "Not released",    icon: "·",  tone: "bg-mist-50 text-mist-400 ring-mist-200" },
+  Planned:          { label: "Planned",          icon: "🗓️", tone: "bg-sun-100 text-sun-700 ring-sun-300" },
   "Merging to UAT": { label: "Merging to UAT",  icon: "🔀", tone: "bg-sky-100 text-sky-600 ring-sky-200" },
   Deployed:         { label: "Deployed",        icon: "🚀", tone: "bg-ocean-100 text-ocean-600 ring-ocean-200" },
 };
@@ -64,7 +67,8 @@ export type Release = {
   id: string;
   fix_version: string;
   deploy_date: string | null;
-  folder_url: string | null;
+  folder_url: string | null;   // satu URL folder SharePoint, tidak per dokumen
+  status: DeployStatus;
   notes: string | null;
 };
 

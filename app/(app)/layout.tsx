@@ -9,7 +9,8 @@ const NAV = [
   { href: "/recap",     icon: "🏆", label: "Rekap Semester" },
   { href: "/epics",     icon: "📦", label: "Epic" },
   { href: "/stories",   icon: "📝", label: "Story" },
-  { href: "/releases",  icon: "🚀", label: "Release & Dokumen" },
+  { href: "/deploy",    icon: "🚢", label: "Need to Deploy" },
+  { href: "/releases",  icon: "🚀", label: "Release" },
   { href: "/flags",     icon: "🚩", label: "Feature Flag" },
   { href: "/sync",      icon: "🔄", label: "Jira Sync" },
 ];
@@ -28,7 +29,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen lg:flex">
       {/* Di layar kecil ini jadi header yang menempel di atas; di desktop jadi sidebar penuh.
           Tombol Keluar ikut pindah ke header supaya tidak perlu scroll untuk menemukannya. */}
-      <aside className="sticky top-0 z-30 bg-ink-900 lg:h-screen lg:w-60 lg:shrink-0 lg:flex lg:flex-col">
+      <aside className="z-30 bg-ink-900 lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0 lg:flex lg:flex-col">
         <div className="flex items-center justify-between gap-3 px-4 py-3 lg:block lg:px-5 lg:py-5">
           <Link href="/" className="flex items-center gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-sun-500 text-sm">📊</span>

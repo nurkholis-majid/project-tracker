@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { useTracker } from "@/lib/useTracker";
 import { epicStats, fmt, num } from "@/lib/kpi";
-import { EPIC_STATUS, labelOf, type Epic, type Story } from "@/lib/types";
+import { EPIC_STATUS, STORY_PROGRESS, labelOf, type Epic, type Story } from "@/lib/types";
+import { epicWindow } from "@/lib/kpi";
 import {
   Badge, Btn, Card, EmptyRow, ErrorBar, Field, FormActions, JiraLink, Loading, Modal,
-  PageHead, Progress, RowActions, Select, Td, Th, inputCls, optionsOf,
+  PageHead, Progress, RowActions, Select, StatusSelect, Td, Th, inputCls, optionsOf,
 } from "@/components/ui";
 
 type SortKey = "baru" | "nama" | "point" | "deadline";
@@ -54,25 +55,20 @@ export default function EpicsPage() {
     if (await save("epics", row)) setForm(null);
   };
 
-  const nextStatus = (s: Epic["status"]) =>
-    EPIC_STATUS[(EPIC_STATUS.indexOf(s) + 1) % EPIC_STATUS.length];
-
   return (
-    <div className="space-y-5">
-      <ErrorBar msg={error} />
-
+    <div>
       <PageHead
         title="Epic"
         sub="Satu epic mewakili satu project. Total story dan story point terhitung otomatis dari data story — tidak perlu diisi manual."
       >
         <Select
-          className="w-52"
+          w="w-44"
           value={status}
           onChange={setStatus}
           options={[{ value: "all", label: "Semua status" }, ...optionsOf(EPIC_STATUS)]}
         />
         <Select
-          className="w-52"
+          w="w-52"
           value={sort}
           onChange={(v) => setSort(v as SortKey)}
           options={SORTS.map((s) => ({ value: s.value, label: s.label }))}
@@ -80,7 +76,9 @@ export default function EpicsPage() {
         <Btn tone="accent" onClick={() => setForm(blank())}>+ Epic</Btn>
       </PageHead>
 
-      <Card>
+      <ErrorBar msg={error} />
+
+      <Card scroll>
         <table className="w-full border-collapse">
           <thead>
             <tr>
@@ -98,6 +96,7 @@ export default function EpicsPage() {
             {rows.map((e) => {
               const st = stats[e.id] ?? { total: 0, points: 0, done: 0, donePoints: 0 };
               const pct = st.points ? Math.round((st.donePoints / st.points) * 100) : 0;
+              const win = epicWindow(e, data.stories);
               return (
                 <tr key={e.id} className="group hover:bg-sky-100/40">
                   <Td>
@@ -117,12 +116,26 @@ export default function EpicsPage() {
                     <div className="mt-1 font-mono text-[10px] text-mist-400">{pct}%</div>
                   </Td>
                   <Td>
-                    <Badge v={e.status} onClick={() => patch("epics", e.id, { status: nextStatus(e.status) })} />
+                    <StatusSelect
+                      value={e.status}
+                      options={EPIC_STATUS}
+                      onChange={(v) => patch("epics", e.id, { status: v })}
+                    />
                   </Td>
                   <Td className="font-mono text-xs">
-                    {e.start_date ? fmt(e.start_date) : <span className="text-sun-600">⚠️ kosong</span>}
+                    {e.start_date ? (
+                      fmt(e.start_date)
+                    ) : win.start ? (
+                      <span className="text-mist-400" title="Diturunkan dari tanggal story">{fmt(win.start)} · auto</span>
+                    ) : (
+                      <span className="text-sun-600">⚠️ kosong</span>
+                    )}
                   </Td>
-                  <Td className="font-mono text-xs">{fmt(e.end_date)}</Td>
+                  <Td className="font-mono text-xs">
+                    {e.end_date ? fmt(e.end_date)
+                      : win.end ? <span className="text-mist-400" title="Diturunkan dari tanggal story">{fmt(win.end)} · auto</span>
+                      : "—"}
+                  </Td>
                   <Td className="font-mono text-xs">{fmt(e.est_deploy)}</Td>
                   <Td>
                     <RowActions
@@ -150,6 +163,7 @@ export default function EpicsPage() {
           releases={data.releases}
           onClose={() => setDetail(null)}
           onEdit={() => { setForm(detail); setDetail(null); }}
+          onPatch={(id, changes) => patch("stories", id, changes)}
         />
       )}
 
@@ -215,13 +229,14 @@ export default function EpicsPage() {
    Yang belum selesai ditaruh di atas — itu yang butuh perhatian.
 --------------------------------------------------------------------- */
 function EpicDetail({
-  epic, stories, releases, onClose, onEdit,
+  epic, stories, releases, onClose, onEdit, onPatch,
 }: {
   epic: Epic;
   stories: Story[];
   releases: { id: string; fix_version: string }[];
   onClose: () => void;
   onEdit: () => void;
+  onPatch: (id: string, changes: Record<string, unknown>) => void;
 }) {
   const rank = { "In Dev": 0, Todo: 1, Done: 2 } as const;
   const sorted = [...stories].sort(
@@ -270,7 +285,10 @@ function EpicDetail({
                   <Td><JiraLink k={s.jira_key} /></Td>
                   <Td className="text-right font-mono text-xs">{s.story_points || "—"}</Td>
                   <Td className="text-right font-mono text-xs">{s.sprint ?? "—"}</Td>
-                  <Td><Badge v={s.progress} /></Td>
+                  <Td>
+                    <StatusSelect value={s.progress} options={STORY_PROGRESS}
+                      onChange={(v) => onPatch(s.id, { progress: v })} />
+                  </Td>
                   <Td className="font-mono text-xs">{relOf(s.release_id) ?? "—"}</Td>
                 </tr>
               ))}

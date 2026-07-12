@@ -61,15 +61,13 @@ export default function FlagsPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <ErrorBar msg={error} />
-
+    <div>
       <PageHead
         title="Feature Flag"
         sub="Kondisi flag di tiap environment. Klik sel DEV, UAT, atau PROD untuk mengubah nilainya. Cukup dicatat untuk epic yang memang memakai flag."
       >
         <Select
-          className="w-60"
+          w="w-56"
           value={env}
           onChange={setEnv}
           options={[
@@ -81,7 +79,9 @@ export default function FlagsPage() {
         <Btn tone="accent" onClick={() => setForm(blank())}>+ Feature flag</Btn>
       </PageHead>
 
-      <Card>
+      <ErrorBar msg={error} />
+
+      <Card scroll>
         <table className="w-full border-collapse">
           <thead>
             <tr>

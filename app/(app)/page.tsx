@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { useTracker } from "@/lib/useTracker";
-import { computeKpi, currentSemester, epicStats, fmt, num } from "@/lib/kpi";
-import { DOC_TYPES, type Story } from "@/lib/types";
+import { computeKpi, currentSemester, epicStats, epicWindow, fmt, num } from "@/lib/kpi";
+import type { Story } from "@/lib/types";
 import {
   Badge, Card, EmptyRow, ErrorBar, JiraLink, Label, Loading, Metric, PageHead, Progress, Td, Th,
 } from "@/components/ui";
@@ -63,21 +63,18 @@ export default function OverviewPage() {
   const todo: { what: string; why: string; href: string; icon: string }[] = [];
 
   data.releases.forEach((r) => {
-    const missing = DOC_TYPES.filter(
-      (t) => t !== "Lainnya" && !data.docs.find((d) => d.release_id === r.id && d.doc_type === t && d.url)
-    );
-    if (missing.length)
-      todo.push({
-        icon: "📄",
-        what: `v${r.fix_version} — dokumen belum lengkap`,
-        why: `Belum ada: ${missing.join(", ")}`,
-        href: "/releases",
-      });
     if (!r.folder_url)
       todo.push({
         icon: "🔗",
-        what: `v${r.fix_version} — folder SharePoint kosong`,
-        why: "Link folder ini jadi bukti deployment waktu review KPI.",
+        what: `v${r.fix_version} — URL folder SharePoint kosong`,
+        why: "Folder ini yang jadi bukti dokumen deployment waktu review KPI.",
+        href: "/releases",
+      });
+    if (r.status === "Planned" && r.deploy_date && r.deploy_date < new Date().toISOString().slice(0, 10))
+      todo.push({
+        icon: "🗓️",
+        what: `v${r.fix_version} — tanggal deploy sudah lewat, status masih Planned`,
+        why: "Kalau sudah rilis, ubah statusnya jadi Deployed supaya masuk hitungan semester.",
         href: "/releases",
       });
   });
@@ -94,12 +91,12 @@ export default function OverviewPage() {
     );
 
   data.epics
-    .filter((e) => !e.start_date)
+    .filter((e) => epicWindow(e, data.stories).noDate)
     .forEach((e) =>
       todo.push({
         icon: "🗓️",
-        what: `${e.name} — start date kosong`,
-        why: "Tanpa tanggal, epic ini nggak masuk hitungan semester manapun.",
+        what: `${e.name} — belum punya tanggal sama sekali`,
+        why: "Epic tanpa start date dan tanpa story bertanggal nggak masuk hitungan semester manapun.",
         href: "/epics",
       })
     );
@@ -113,33 +110,35 @@ export default function OverviewPage() {
       href: "/stories",
     });
 
-  const doneNoRelease = data.stories.filter((s) => s.progress === "Done" && !s.release_id).length;
-  if (doneNoRelease)
+  const waiting = data.stories.filter((s) => s.progress === "Done" && s.release_status !== "Deployed").length;
+  if (waiting)
     todo.push({
-      icon: "🚀",
-      what: `${doneNoRelease} story Done tapi belum masuk fix version`,
-      why: "Assign ke release supaya jejak deploy-nya kelihatan.",
-      href: "/stories",
+      icon: "🚢",
+      what: `${waiting} story Done tapi belum sampai production`,
+      why: "Assign ke fix version dan tandai Deployed setelah rilis.",
+      href: "/deploy",
     });
 
   return (
-    <div className="space-y-6">
-      <ErrorBar msg={error} />
-
+    <div>
       <PageHead
         title="Overview"
         sub={`Ringkasan delivery hari ini — sprint berjalan, velocity, dan hal yang perlu ditindaklanjuti. Angka penilaian Semester ${sem.half} ${sem.year} ada di menu Rekap Semester.`}
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <ErrorBar msg={error} />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Metric v={active.length} k="Epic aktif" icon="📦" />
         <Metric v={inDev.length} k="Story in dev" icon="🔨" />
+        <Metric v={velocity.avg} k="Avg velocity" icon="⚡" />
         <Metric v={kpi.epicsDone.length} k={`Epic done · S${sem.half}`} icon="🏆" accent />
-        <Metric v={velocity.avg} k="Avg velocity / sprint" icon="⚡" />
+        <Metric v={data.stories.filter((s) => s.progress === "Done" && s.release_status !== "Deployed").length}
+          k="Menunggu deploy" icon="🚢" />
       </div>
 
       {/* Sprint aktif + velocity: dua hal yang paling sering ditanya waktu standup */}
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <section className="rounded-2xl border border-mist-200 bg-white p-5 shadow-card">
           <Label>Sprint berjalan</Label>
           {sprintInfo ? (
@@ -192,11 +191,11 @@ export default function OverviewPage() {
         </section>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <section className="lg:col-span-2 space-y-5">
           <div>
             <h2 className="mb-2 text-base font-semibold">📦 Epic yang belum selesai</h2>
-            <Card>
+            <Card scroll>
               <table className="w-full border-collapse">
                 <thead>
                   <tr>
@@ -241,7 +240,7 @@ export default function OverviewPage() {
 
           <div>
             <h2 className="mb-2 text-base font-semibold">🚀 Antre release</h2>
-            <Card>
+            <Card scroll>
               <table className="w-full border-collapse">
                 <thead>
                   <tr>

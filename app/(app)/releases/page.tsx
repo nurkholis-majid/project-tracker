@@ -3,168 +3,123 @@
 import { useState } from "react";
 import { useTracker } from "@/lib/useTracker";
 import { fmt, num } from "@/lib/kpi";
-import { DOC_TYPES, type DocType, type Release } from "@/lib/types";
-import { supabase } from "@/lib/supabase";
+import { DEPLOY_STATUS, type Release } from "@/lib/types";
 import {
-  Btn, ErrorBar, Field, FormActions, Label, Loading, Modal, PageHead, Progress, RowActions, inputCls,
+  Badge, Btn, ErrorBar, Field, FormActions, JiraLink, Label, Loading, Modal, PageHead,
+  RowActions, Select, StatusSelect, inputCls, optionsOf,
 } from "@/components/ui";
 
-const blank = (): Partial<Release> => ({ fix_version: "", deploy_date: null, folder_url: "", notes: "" });
+const blank = (): Partial<Release> => ({
+  fix_version: "", deploy_date: null, folder_url: "", status: "Planned", notes: "",
+});
 
 export default function ReleasesPage() {
-  const { data, loading, error, setError, remove, reload } = useTracker();
+  const { data, loading, error, save, remove, patch } = useTracker();
   const [form, setForm] = useState<Partial<Release> | null>(null);
-  const [docs, setDocs] = useState<Record<DocType, string>>({} as Record<DocType, string>);
+  const [filter, setFilter] = useState("all");
 
   if (loading) return <Loading />;
 
-  const openForm = (r?: Release) => {
-    const d = {} as Record<DocType, string>;
-    DOC_TYPES.forEach((t) => {
-      d[t] = r ? data.docs.find((x) => x.release_id === r.id && x.doc_type === t)?.url ?? "" : "";
-    });
-    setDocs(d);
-    setForm(r ?? blank());
-  };
+  const rows = data.releases.filter((r) => filter === "all" || r.status === filter);
 
   const submit = async () => {
     if (!form?.fix_version) return;
     const row: Record<string, unknown> = { ...form };
     if (!row.deploy_date) row.deploy_date = null;
-
-    const sb = supabase();
-    let releaseId = form.id;
-
-    if (releaseId) {
-      const { error } = await sb.from("releases").update(row).eq("id", releaseId);
-      if (error) return setError("Release gagal disimpan: " + error.message);
-    } else {
-      const { data: created, error } = await sb.from("releases").insert(row).select("id").single();
-      if (error || !created) return setError("Release gagal disimpan: " + (error?.message ?? ""));
-      releaseId = created.id;
-    }
-
-    const rows = DOC_TYPES.filter((t) => docs[t]?.trim()).map((t) => ({
-      release_id: releaseId, doc_type: t, url: docs[t].trim(),
-    }));
-    const emptyTypes = DOC_TYPES.filter((t) => !docs[t]?.trim());
-
-    if (rows.length) {
-      const { error } = await sb.from("release_documents").upsert(rows, { onConflict: "release_id,doc_type" });
-      if (error) return setError("URL dokumen gagal disimpan: " + error.message);
-    }
-    if (emptyTypes.length) {
-      await sb.from("release_documents").delete().eq("release_id", releaseId).in("doc_type", emptyTypes);
-    }
-
-    setForm(null);
-    await reload();
+    if (await save("releases", row)) setForm(null);
   };
 
   return (
-    <div className="space-y-5">
-      <ErrorBar msg={error} />
-
+    <div>
       <PageHead
-        title="Release & Dokumen"
-        sub="Setiap fix version punya satu folder SharePoint. Daftar epic di dalamnya terisi otomatis dari story yang di-assign ke versi tersebut."
+        title="Release"
+        sub="Satu fix version, satu URL folder SharePoint. Daftar story di bawahnya terisi otomatis dari yang di-assign ke versi ini."
       >
-        <Btn tone="accent" onClick={() => openForm()}>+ Fix version</Btn>
+        <Select
+          w="w-48"
+          value={filter}
+          onChange={setFilter}
+          options={[{ value: "all", label: "Semua release" }, ...optionsOf(DEPLOY_STATUS)]}
+        />
+        <Btn tone="accent" onClick={() => setForm(blank())}>+ Fix version</Btn>
       </PageHead>
 
+      <ErrorBar msg={error} />
+
       <div className="grid gap-4 lg:grid-cols-2">
-        {data.releases.map((r) => {
+        {rows.map((r) => {
           const stories = data.stories.filter((s) => s.release_id === r.id);
-          const epics = Array.from(new Set(stories.map((s) => s.epic_id)))
-            .map((id) => data.epics.find((e) => e.id === id))
-            .filter(Boolean);
           const pts = stories.reduce((a, s) => a + num(s.story_points), 0);
-          const filled = DOC_TYPES.filter(
-            (t) => t !== "Lainnya" && data.docs.find((d) => d.release_id === r.id && d.doc_type === t && d.url)
-          ).length;
-          const need = DOC_TYPES.length - 1;
+          const deployed = stories.filter((s) => s.release_status === "Deployed").length;
 
           return (
-            <div key={r.id} className="rounded-2xl border border-mist-200 bg-white shadow-card">
-              <div className="flex items-start justify-between border-b border-mist-100 px-5 py-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🚀</span>
+            <div key={r.id} className="flex flex-col rounded-2xl border border-mist-200 bg-white shadow-card">
+              <div className="flex items-start justify-between gap-3 border-b border-mist-100 px-5 py-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xl font-semibold">v{r.fix_version}</span>
+                    <StatusSelect
+                      value={r.status}
+                      options={DEPLOY_STATUS}
+                      onChange={(v) => patch("releases", r.id, { status: v })}
+                    />
                   </div>
                   <div className="mt-1 font-mono text-xs text-mist-600">
-                    {r.deploy_date ? `Deploy ${fmt(r.deploy_date)}` : "Belum ada tanggal deploy"} · {stories.length} story · {pts} pt
+                    {r.deploy_date ? `${r.status === "Deployed" ? "Deployed" : "Rencana"} ${fmt(r.deploy_date)}` : "Tanggal deploy belum diisi"}
+                    {" · "}{stories.length} story · {pts} pt
                   </div>
                 </div>
                 <RowActions
-                  onEdit={() => openForm(r)}
+                  onEdit={() => setForm(r)}
                   onDelete={() => confirm(`Hapus release v${r.fix_version}?`) && remove("releases", r.id)}
                 />
               </div>
 
               <div className="space-y-4 px-5 py-4">
                 <div>
-                  <Label>Epic di release ini</Label>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {epics.length ? (
-                      epics.map((e) => (
-                        <span key={e!.id} className="rounded-full bg-mist-100 px-2 py-0.5 text-xs text-ink-700">
-                          {e!.name}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-mist-400">
-                        Belum ada story yang di-assign ke fix version ini.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Folder dokumen</Label>
+                  <Label>Folder dokumen (TAT, QCR, DR, dll.)</Label>
                   {r.folder_url ? (
                     <a href={r.folder_url} target="_blank" rel="noreferrer"
-                      className="mt-0.5 block truncate text-xs text-ocean-600 underline underline-offset-2">
+                      className="mt-1 block truncate text-xs text-ocean-600 underline underline-offset-2">
                       🔗 {r.folder_url}
                     </a>
                   ) : (
-                    <span className="text-xs text-mist-400">Belum ada URL folder SharePoint.</span>
+                    <p className="mt-1 text-xs text-sun-600">⚠️ URL folder SharePoint belum diisi</p>
                   )}
                 </div>
 
                 <div>
                   <div className="mb-1 flex items-center justify-between">
-                    <Label>Kelengkapan dokumen</Label>
-                    <span className="font-mono text-[10px] text-mist-400">{filled}/{need}</span>
+                    <Label>Story di release ini</Label>
+                    <span className="font-mono text-[10px] text-mist-400">{deployed}/{stories.length} deployed</span>
                   </div>
-                  <Progress pct={(filled / need) * 100} tone={filled === need ? "bg-ocean-600" : "bg-sun-500"} />
-                  <div className="mt-2 grid grid-cols-2 gap-1">
-                    {DOC_TYPES.map((t) => {
-                      const url = data.docs.find((d) => d.release_id === r.id && d.doc_type === t)?.url;
-                      return url ? (
-                        <a key={t} href={url} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-2 rounded-lg bg-ocean-100 px-2 py-1 text-xs text-ocean-600 hover:bg-ocean-200">
-                          ✅ {t}
-                        </a>
-                      ) : (
-                        <span key={t} className="flex items-center gap-2 rounded-lg bg-mist-50 px-2 py-1 text-xs text-mist-400">
-                          ⬜ {t}
-                        </span>
-                      );
-                    })}
+
+                  <div className="max-h-56 overflow-y-auto rounded-xl border border-mist-100">
+                    {stories.map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 border-b border-mist-100 px-3 py-2 last:border-0">
+                        <span className="min-w-0 flex-1 truncate text-xs text-ink-700">{s.title}</span>
+                        <JiraLink k={s.jira_key} />
+                        <Badge v={s.release_status} />
+                      </div>
+                    ))}
+                    {stories.length === 0 && (
+                      <p className="px-3 py-6 text-center text-xs text-mist-400">
+                        Belum ada story. Assign dari menu Need to Deploy.
+                      </p>
+                    )}
                   </div>
                 </div>
+
+                {r.notes && <p className="rounded-xl bg-mist-50 px-3 py-2 text-xs text-ink-700">📌 {r.notes}</p>}
               </div>
             </div>
           );
         })}
 
-        {data.releases.length === 0 && (
+        {rows.length === 0 && (
           <div className="rounded-2xl border border-dashed border-mist-200 bg-white p-10 text-center lg:col-span-2">
             <div className="text-3xl">🚀</div>
-            <p className="mt-2 text-sm text-mist-600">
-              Belum ada fix version. Bikin satu, lalu assign story-nya dari menu Story.
-            </p>
+            <p className="mt-2 text-sm text-mist-600">Belum ada fix version di filter ini.</p>
           </div>
         )}
       </div>
@@ -172,40 +127,35 @@ export default function ReleasesPage() {
       {form && (
         <Modal
           title={form.id ? `Ubah release v${form.fix_version}` : "Fix version baru"}
-          subtitle="Dokumen tetap di SharePoint — di sini cuma disimpan URL-nya."
+          subtitle="Dokumen tetap di SharePoint — di sini cukup satu URL folder-nya."
           onClose={() => setForm(null)}
-          wide
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Fix version">
                 <input className={inputCls + " font-mono"} value={form.fix_version ?? ""}
                   onChange={(e) => setForm({ ...form, fix_version: e.target.value })} placeholder="1.13.0" />
               </Field>
-              <Field label="Tanggal deploy" hint="Release dihitung masuk semester berdasarkan tanggal ini.">
+              <Field label="Tanggal deploy">
                 <input type="date" className={inputCls} value={form.deploy_date ?? ""}
                   onChange={(e) => setForm({ ...form, deploy_date: e.target.value })} />
               </Field>
+              <Field label="Status">
+                <Select full value={form.status ?? "Planned"}
+                  onChange={(v) => setForm({ ...form, status: v as Release["status"] })} options={optionsOf(DEPLOY_STATUS)} />
+              </Field>
             </div>
 
-            <Field label="URL folder SharePoint">
+            <Field label="URL folder SharePoint" hint="Satu folder berisi semua dokumen deployment versi ini.">
               <input className={inputCls} value={form.folder_url ?? ""}
                 onChange={(e) => setForm({ ...form, folder_url: e.target.value })}
                 placeholder="https://…/00. Done Deploy/1.13.0" />
             </Field>
 
-            <div>
-              <Label>URL dokumen deployment</Label>
-              <div className="mt-2 space-y-2">
-                {DOC_TYPES.map((t) => (
-                  <div key={t} className="flex items-center gap-2">
-                    <span className="w-28 shrink-0 font-mono text-xs text-mist-600">{t}</span>
-                    <input className={inputCls} value={docs[t] ?? ""}
-                      onChange={(e) => setDocs({ ...docs, [t]: e.target.value })} placeholder="https://sharepoint…" />
-                  </div>
-                ))}
-              </div>
-            </div>
+            <Field label="Notes">
+              <textarea rows={3} className={inputCls} value={form.notes ?? ""}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </Field>
 
             <FormActions onClose={() => setForm(null)} onSave={submit} />
           </div>

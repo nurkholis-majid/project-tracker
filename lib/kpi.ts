@@ -4,7 +4,7 @@ export type Semester = {
   half: 1 | 2;
   year: number;
   label: string;
-  start: string; // YYYY-MM-DD
+  start: string;
   end: string;
   months: string[];
 };
@@ -36,14 +36,38 @@ export const fmt = (iso: string | null | undefined) => {
   return `${d}/${m}/${y}`;
 };
 
-export const inSemester = (iso: string | null, s: Semester) =>
-  !!iso && iso >= s.start && iso <= s.end;
+export const inSemester = (iso: string | null, s: Semester) => !!iso && iso >= s.start && iso <= s.end;
 
-/** Epic dianggap "berjalan di semester ini" kalau periodenya beririsan dengan rentang semester. */
-export const overlapsSemester = (e: Epic, s: Semester) => {
-  if (!e.start_date) return false;
-  const end = e.end_date || "9999-12-31";
-  return e.start_date <= s.end && end >= s.start;
+/**
+ * Rentang waktu efektif sebuah epic.
+ *
+ * Kalau start/end date epic belum diisi manual, tanggalnya diturunkan dari story-nya:
+ * mulai = story paling awal, selesai = story terakhir (hanya kalau semua story sudah Done).
+ * Tanpa ini, epic hasil sync Jira (yang tidak punya tanggal) tidak akan pernah
+ * muncul di rekap semester — persis masalah "0 project berjalan" padahal kerjaan banyak.
+ */
+export function epicWindow(e: Epic, stories: Story[]) {
+  const own = stories.filter((s) => s.epic_id === e.id);
+  const pick = (arr: (string | null)[]) => arr.filter(Boolean).sort() as string[];
+  const starts = pick(own.map((s) => s.start_date));
+  const ends = pick(own.map((s) => s.end_date));
+  const allDone = own.length > 0 && own.every((s) => s.progress === "Done");
+
+  const start = e.start_date ?? starts[0] ?? null;
+  const end = e.end_date ?? (allDone ? ends[ends.length - 1] ?? null : null);
+
+  return {
+    start,
+    end,
+    derived: (!e.start_date && !!start) || (!e.end_date && !!end),
+    noDate: !start,
+  };
+}
+
+export const overlapsSemester = (w: { start: string | null; end: string | null }, s: Semester) => {
+  if (!w.start) return false;
+  const end = w.end || "9999-12-31";
+  return w.start <= s.end && end >= s.start;
 };
 
 export type EpicStat = { total: number; points: number; done: number; donePoints: number };
@@ -65,10 +89,12 @@ export function epicStats(t: Tracker): Record<string, EpicStat> {
   return m;
 }
 
+export type EpicWithWindow = Epic & { win: ReturnType<typeof epicWindow> };
+
 export type Kpi = {
   sem: Semester;
-  epicsRunning: Epic[];
-  epicsDone: Epic[];
+  epicsRunning: EpicWithWindow[];
+  epicsDone: EpicWithWindow[];
   storiesDone: Story[];
   pointsDone: number;
   releases: Release[];
@@ -76,67 +102,99 @@ export type Kpi = {
 };
 
 export function computeKpi(t: Tracker, sem: Semester): Kpi {
-  const epicsRunning = t.epics
-    .filter((e) => overlapsSemester(e, sem))
-    .sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
-  const epicsDone = epicsRunning.filter((e) => inSemester(e.end_date, sem));
+  const withWin: EpicWithWindow[] = t.epics.map((e) => ({ ...e, win: epicWindow(e, t.stories) }));
+
+  const epicsRunning = withWin
+    .filter((e) => overlapsSemester(e.win, sem))
+    .sort((a, b) => (a.win.start || "").localeCompare(b.win.start || ""));
+  const epicsDone = epicsRunning.filter((e) => inSemester(e.win.end, sem));
+
   const storiesDone = t.stories.filter((s) => s.progress === "Done" && inSemester(s.end_date, sem));
   const pointsDone = storiesDone.reduce((a, s) => a + num(s.story_points), 0);
-  const releases = t.releases.filter((r) => inSemester(r.deploy_date, sem));
+  const releases = t.releases.filter((r) => r.status === "Deployed" && inSemester(r.deploy_date, sem));
   const sprints = Array.from(
     new Set(storiesDone.map((s) => s.sprint).filter((x): x is number => x != null))
   ).sort((a, b) => a - b);
+
   return { sem, epicsRunning, epicsDone, storiesDone, pointsDone, releases, sprints };
 }
 
-/** Teks rekap siap tempel ke email / deck manager. */
-export function recapText(t: Tracker, kpi: Kpi): string {
+/** Story yang sudah Done tapi belum ter-deploy — bahan menu "Need to Deploy". */
+export function needDeploy(t: Tracker): Story[] {
+  return t.stories.filter((s) => s.progress === "Done" && s.release_status !== "Deployed");
+}
+
+/* ------------------------------------------------------------------ rekap */
+export type RecapFormat = "text" | "markdown";
+
+export function recapText(t: Tracker, kpi: Kpi, format: RecapFormat = "text"): string {
   const stats = epicStats(t);
   const relById = Object.fromEntries(t.releases.map((r) => [r.id, r]));
+  const md = format === "markdown";
   const L: string[] = [];
 
-  L.push(`REKAP ${kpi.sem.label.toUpperCase()} — SQUAD LSS`, "");
-  L.push(
-    `Ringkasan: ${kpi.epicsRunning.length} project berjalan, ${kpi.epicsDone.length} selesai, ` +
-      `${kpi.pointsDone} story point delivered dari ${kpi.storiesDone.length} story, ` +
-      `${kpi.releases.length} release ke production.`,
-    ""
-  );
+  const h1 = (s: string) => (md ? `# ${s}` : s.toUpperCase());
+  const h2 = (s: string) => (md ? `\n## ${s}` : `\n${s.toUpperCase()}`);
+  const b = (s: string) => (md ? `**${s}**` : s);
+  const li = (s: string) => (md ? `- ${s}` : `• ${s}`);
 
-  kpi.epicsRunning.forEach((e, i) => {
-    const st = stats[e.id] || { total: 0, points: 0, done: 0, donePoints: 0 };
-    const vers = Array.from(
+  const versionsOf = (epicId: string) =>
+    Array.from(
       new Set(
         t.stories
-          .filter((s) => s.epic_id === e.id && s.release_id && relById[s.release_id])
+          .filter((s) => s.epic_id === epicId && s.release_id && relById[s.release_id])
           .map((s) => relById[s.release_id!].fix_version)
       )
     );
-    L.push(`${i + 1}. ${e.name}${e.jira_key ? ` (${e.jira_key})` : ""}`);
-    L.push(
-      `   Status: ${e.status} · Periode: ${fmt(e.start_date)} – ${fmt(e.end_date)} · ` +
-        `${st.done}/${st.total} story · ${st.donePoints}/${st.points} point`
-    );
-    if (vers.length) L.push(`   Release: ${vers.join(", ")}`);
-    if (e.notes) L.push(`   Catatan: ${e.notes.replace(/\n/g, " · ")}`);
-    L.push("");
-  });
 
-  if (kpi.releases.length) {
-    L.push("Release ke production:");
-    kpi.releases.forEach((r) => L.push(`- v${r.fix_version} (${fmt(r.deploy_date)})`));
-    L.push("");
+  L.push(h1(`Rekap ${kpi.sem.label.replace(" · ", " ")}`), "");
+  L.push(
+    `${b("Ringkasan")}: ${kpi.epicsDone.length} epic selesai dari ${kpi.epicsRunning.length} epic yang berjalan · ` +
+      `${kpi.pointsDone} story point delivered (${kpi.storiesDone.length} story) · ` +
+      `${kpi.releases.length} release ke production` +
+      (kpi.sprints.length ? ` · sprint ${kpi.sprints[0]}–${kpi.sprints[kpi.sprints.length - 1]}` : "")
+  );
+
+  const done = kpi.epicsDone;
+  const ongoing = kpi.epicsRunning.filter((e) => !done.includes(e));
+
+  const block = (e: EpicWithWindow) => {
+    const st = stats[e.id] ?? { total: 0, points: 0, done: 0, donePoints: 0 };
+    const vers = versionsOf(e.id);
+    const parts = [
+      `${st.done}/${st.total} story`,
+      `${st.donePoints}/${st.points} pt`,
+      `${fmt(e.win.start)}–${fmt(e.win.end)}`,
+    ];
+    if (vers.length) parts.push(`release ${vers.map((v) => `v${v}`).join(", ")}`);
+    L.push(li(`${b(e.name)}${e.jira_key ? ` (${e.jira_key})` : ""} — ${e.status} · ${parts.join(" · ")}`));
+    if (e.notes) L.push(md ? `  - _${e.notes.replace(/\n/g, " · ")}_` : `    ${e.notes.replace(/\n/g, " · ")}`);
+  };
+
+  if (done.length) {
+    L.push(h2(`Epic selesai (${done.length})`), "");
+    done.forEach(block);
   }
-  if (kpi.sprints.length) L.push(`Sprint terlibat: ${kpi.sprints.join(", ")}`);
+  if (ongoing.length) {
+    L.push(h2(`Epic masih berjalan (${ongoing.length})`), "");
+    ongoing.forEach(block);
+  }
+  if (kpi.releases.length) {
+    L.push(h2(`Release ke production (${kpi.releases.length})`), "");
+    kpi.releases.forEach((r) => {
+      const n = t.stories.filter((s) => s.release_id === r.id).length;
+      L.push(li(`v${r.fix_version} — ${fmt(r.deploy_date)} · ${n} story`));
+    });
+  }
+
   return L.join("\n");
 }
 
-/** Posisi & lebar bar epic di strip 6 bulan (persen). */
-export function barGeom(e: Epic, s: Semester) {
+export function barGeom(win: { start: string | null; end: string | null }, s: Semester) {
   const days = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86400000;
   const span = days(s.start, s.end) || 1;
-  const from = e.start_date && e.start_date > s.start ? e.start_date : s.start;
-  const to = e.end_date && e.end_date < s.end ? e.end_date : s.end;
+  const from = win.start && win.start > s.start ? win.start : s.start;
+  const to = win.end && win.end < s.end ? win.end : s.end;
   const left = Math.max(0, (days(s.start, from) / span) * 100);
   const width = Math.max(2, Math.min(100 - left, (days(from, to) / span) * 100));
   return { left, width };
@@ -145,16 +203,11 @@ export function barGeom(e: Epic, s: Semester) {
 export function csvOfStories(t: Tracker): string {
   const epicName = (id: string | null) => t.epics.find((e) => e.id === id)?.name ?? "";
   const relName = (id: string | null) => t.releases.find((r) => r.id === id)?.fix_version ?? "";
-  const head = [
-    "Epic", "Task List", "Story", "Jira", "Point", "Sprint",
-    "Start", "End", "Progress", "Fix Version", "Status Release",
-  ];
+  const head = ["Epic", "Task List", "Story", "Jira", "Point", "Sprint", "Start", "End", "Progress", "Fix Version", "Status Release"];
   const rows = t.stories.map((s) => [
     epicName(s.epic_id), s.task_group ?? "", s.title, s.jira_key ?? "",
     s.story_points ?? "", s.sprint ?? "", s.start_date ?? "", s.end_date ?? "",
     s.progress, relName(s.release_id), s.release_status,
   ]);
-  return [head, ...rows]
-    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
+  return [head, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
 }

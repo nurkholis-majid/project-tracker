@@ -49,14 +49,15 @@ export default function SyncPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <ErrorBar msg={error} />
-
+    <div className="space-y-6">
       <PageHead
         title="Jira Sync"
         sub="Menarik epic dan story dari Jira. Bersifat read-only — tidak ada data di Jira yang diubah."
       />
 
+      <ErrorBar msg={error} />
+
+      <div className="grid gap-6 lg:grid-cols-2">
       <Card>
         <div className="space-y-5 p-5">
           <Field label="JQL" hint="Kosongkan untuk pakai query default. Contoh: project = DLB AND Sprint in (64, 65)">
@@ -118,6 +119,7 @@ export default function SyncPage() {
           </Card>
         </div>
       </section>
+      </div>
     </div>
   );
 }

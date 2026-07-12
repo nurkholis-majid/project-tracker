@@ -8,6 +8,29 @@ export type StoryProgress = (typeof STORY_PROGRESS)[number];
 export type ReleaseStatus = (typeof RELEASE_STATUS)[number];
 export type DocType = (typeof DOC_TYPES)[number];
 
+/**
+ * Terminologi tetap istilah agile/PM standar — tim sudah paham, dan "User Testing"
+ * lebih presisi daripada terjemahan bebasnya. Simbol dipakai supaya status kebaca
+ * sekilas, bukan untuk menggantikan istilahnya.
+ */
+export const META: Record<string, { label: string; icon: string; tone: string }> = {
+  Requirement:      { label: "Requirement",     icon: "✏️", tone: "bg-mist-100 text-ink-700 ring-mist-200" },
+  Development:      { label: "Development",     icon: "🔨", tone: "bg-sun-100 text-sun-700 ring-sun-300" },
+  "User Testing":   { label: "User Testing",    icon: "🔍", tone: "bg-sky-100 text-sky-600 ring-sky-200" },
+  Deploy:           { label: "Deploy",          icon: "🚀", tone: "bg-ocean-100 text-ocean-600 ring-ocean-200" },
+  Hold:             { label: "Hold",            icon: "⏸️", tone: "bg-alert-100 text-alert-600 ring-alert-200" },
+
+  Todo:             { label: "Todo",            icon: "⚪", tone: "bg-mist-100 text-mist-600 ring-mist-200" },
+  "In Dev":         { label: "In Dev",          icon: "🔨", tone: "bg-sun-100 text-sun-700 ring-sun-300" },
+  Done:             { label: "Done",            icon: "✅", tone: "bg-ocean-100 text-ocean-600 ring-ocean-200" },
+
+  "-":              { label: "Not released",    icon: "·",  tone: "bg-mist-50 text-mist-400 ring-mist-200" },
+  "Merging to UAT": { label: "Merging to UAT",  icon: "🔀", tone: "bg-sky-100 text-sky-600 ring-sky-200" },
+  Deployed:         { label: "Deployed",        icon: "🚀", tone: "bg-ocean-100 text-ocean-600 ring-ocean-200" },
+};
+
+export const labelOf = (v?: string | null) => META[v ?? "-"]?.label ?? v ?? "—";
+
 export type Epic = {
   id: string;
   name: string;
@@ -17,6 +40,7 @@ export type Epic = {
   end_date: string | null;
   est_deploy: string | null;
   notes: string | null;
+  created_at: string;
 };
 
 export type Story = {
@@ -54,12 +78,13 @@ export type ReleaseDoc = {
 export type Flag = {
   id: string;
   name: string;
-  epic_id: string | null;
+  epic_ids: string[];      // satu flag bisa dipakai beberapa epic
+  epic_id: string | null;  // kolom lama, tidak ditulis lagi
   description: string | null;
   dev: boolean | null;
   uat: boolean | null;
   prod: boolean | null;
-  jira_key: string | null;
+  jira_key: string | null; // boleh berisi beberapa key, dipisah koma
 };
 
 export type SyncRun = {
@@ -82,6 +107,5 @@ export type Tracker = {
 
 export const EMPTY_TRACKER: Tracker = { epics: [], stories: [], releases: [], docs: [], flags: [] };
 
-/** Base URL Jira buat bikin link dari issue key. */
 export const JIRA_BROWSE =
   (process.env.NEXT_PUBLIC_JIRA_BASE_URL || "https://incubation.atlassian.net") + "/browse/";

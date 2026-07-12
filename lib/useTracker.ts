@@ -19,8 +19,8 @@ export function useTracker() {
   const load = useCallback(async () => {
     setLoading(true);
     const [epics, stories, releases, docs, flags] = await Promise.all([
-      sb.from("epics").select("*").order("start_date", { ascending: true, nullsFirst: false }),
-      sb.from("stories").select("*").order("sprint", { ascending: true, nullsFirst: false }),
+      sb.from("epics").select("*").order("created_at", { ascending: false }),
+      sb.from("stories").select("*").order("sprint", { ascending: false, nullsFirst: false }),
       sb.from("releases").select("*").order("fix_version", { ascending: false }),
       sb.from("release_documents").select("*"),
       sb.from("feature_flags").select("*").order("created_at", { ascending: true }),
@@ -40,7 +40,8 @@ export function useTracker() {
       stories: (stories.data ?? []) as Tracker["stories"],
       releases: (releases.data ?? []) as Tracker["releases"],
       docs: (docs.data ?? []) as Tracker["docs"],
-      flags: (flags.data ?? []) as Tracker["flags"],
+      // baris lama bisa punya epic_ids null; normalkan jadi array kosong
+      flags: ((flags.data ?? []) as Tracker["flags"]).map((f) => ({ ...f, epic_ids: f.epic_ids ?? [] })),
     });
     setLoading(false);
   }, [sb]);

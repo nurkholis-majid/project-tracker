@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase";
 import { EMPTY_TRACKER, type Tracker } from "./types";
+import { compareVersionDesc } from "./kpi";
 
 /**
  * Satu hook untuk seluruh data tracker.
@@ -21,7 +22,7 @@ export function useTracker() {
     const [epics, stories, releases, docs, flags] = await Promise.all([
       sb.from("epics").select("*").order("created_at", { ascending: false }),
       sb.from("stories").select("*").order("sprint", { ascending: false, nullsFirst: false }),
-      sb.from("releases").select("*").order("fix_version", { ascending: false }),
+      sb.from("releases").select("*"),
       sb.from("release_documents").select("*"),
       sb.from("feature_flags").select("*").order("created_at", { ascending: true }),
     ]);
@@ -38,7 +39,12 @@ export function useTracker() {
     setData({
       epics: (epics.data ?? []) as Tracker["epics"],
       stories: (stories.data ?? []) as Tracker["stories"],
-      releases: (releases.data ?? []) as Tracker["releases"],
+      // Urutan versi tidak bisa diserahkan ke Postgres: kolomnya text, jadi
+      // "1.9.0" akan dianggap > "1.13.0". Diurutkan di sini sekali, dipakai
+      // oleh semua halaman dan dropdown.
+      releases: ((releases.data ?? []) as Tracker["releases"]).sort((a, b) =>
+        compareVersionDesc(a.fix_version, b.fix_version)
+      ),
       docs: (docs.data ?? []) as Tracker["docs"],
       // baris lama bisa punya epic_ids null; normalkan jadi array kosong
       flags: ((flags.data ?? []) as Tracker["flags"]).map((f) => ({ ...f, epic_ids: f.epic_ids ?? [] })),

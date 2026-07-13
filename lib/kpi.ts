@@ -39,6 +39,21 @@ export const fmt = (iso: string | null | undefined) => {
 export const inSemester = (iso: string | null, s: Semester) => !!iso && iso >= s.start && iso <= s.end;
 
 /**
+ * Bandingkan fix version sebagai deret angka, bukan teks.
+ * Sebagai teks, "1.9.0" akan dianggap lebih besar dari "1.13.0" karena '9' > '1'.
+ * Segmen non-angka (mis. "1.13.0-rc1") diabaikan nilainya, tapi tidak bikin error.
+ */
+export function compareVersionDesc(a: string, b: string) {
+  const parts = (v: string) => v.split(/[.\-_]/).map((x) => parseInt(x, 10) || 0);
+  const pa = parts(a), pb = parts(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pb[i] ?? 0) - (pa[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return b.localeCompare(a);
+}
+
+/**
  * Rentang waktu efektif sebuah epic.
  *
  * Kalau start/end date epic belum diisi manual, tanggalnya diturunkan dari story-nya:

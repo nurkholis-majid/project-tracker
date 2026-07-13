@@ -12,10 +12,9 @@ import {
 type SortKey = "epic" | "sprint" | "point" | "judul";
 
 const SORTS = [
-  { value: "epic",   label: "📦 Per epic" },
-  { value: "sprint", label: "🏃 Sprint terbaru" },
-  { value: "point",  label: "🔢 Story point terbesar" },
-  { value: "judul",  label: "🔤 Judul A–Z" },
+  { value: "epic",   label: "📦 Epic" },
+  { value: "sprint", label: "🏃 Sprint" },
+  { value: "judul",  label: "🔤 Judul" },
 ];
 
 /** Story yang belum kelar naik ke atas; yang Done turun ke bawah. */
@@ -164,7 +163,6 @@ export default function StoriesPage() {
     <div>
       <PageHead
         title="Story"
-        sub="Progress dan status release bisa diubah langsung dari tabel. Story berstatus Done otomatis turun ke bawah."
       >
         <input className={filterCls + " w-52"} placeholder="🔍 Cari story / DLB-…" value={q} onChange={(e) => setQ(e.target.value)} />
         <Select w="w-52" value={epicF} onChange={setEpicF}
@@ -176,11 +174,6 @@ export default function StoriesPage() {
         <Select w="w-40" value={progF} onChange={setProgF}
           options={[{ value: "all", label: "Semua progress" }, ...optionsOf(STORY_PROGRESS)]} />
         <Select w="w-48" value={sort} onChange={(v) => setSort(v as SortKey)} options={SORTS} />
-        {single && (
-          <span className="rounded-full bg-mist-100 px-3 py-1.5 text-xs text-mist-600">
-            Diurutkan per nomor Jira
-          </span>
-        )}
         <Btn tone="accent" onClick={() => setForm(blank())}>+ Story</Btn>
       </PageHead>
 

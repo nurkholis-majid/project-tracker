@@ -59,7 +59,7 @@ export default function EpicsPage() {
     <div>
       <PageHead
         title="Epic"
-        sub="Satu epic mewakili satu project. Total story dan story point terhitung otomatis dari data story — tidak perlu diisi manual."
+        sub="Satu epic mewakili satu project."
       >
         <Select
           w="w-44"

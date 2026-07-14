@@ -123,7 +123,7 @@ export default function OverviewPage() {
     <div>
       <PageHead
         title="Overview"
-        sub={`Ringkasan delivery hari ini — sprint berjalan, velocity, dan hal yang perlu ditindaklanjuti. Angka penilaian Semester ${sem.half} ${sem.year} ada di menu Rekap Semester.`}
+        sub={`Ringkasan delivery hari ini — sprint berjalan, velocity, dan hal yang perlu ditindaklanjuti.`}
       />
 
       <ErrorBar msg={error} />

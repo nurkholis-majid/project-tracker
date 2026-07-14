@@ -165,23 +165,38 @@ export default function OverviewPage() {
 
         <section className="rounded-2xl border border-mist-200 bg-white p-5 shadow-card lg:col-span-2">
           <div className="flex items-center justify-between">
-            <Label>Velocity — story point Done per sprint</Label>
+            <Label>Velocity — story point done per sprint</Label>
             <span className="font-mono text-[11px] text-mist-600">rata-rata {velocity.avg} pt</span>
           </div>
 
           {velocity.rows.length ? (
-            <div className="mt-4 flex h-32 items-end gap-3">
-              {velocity.rows.map(([sprint, pts]) => (
-                <div key={sprint} className="flex flex-1 flex-col items-center gap-1">
-                  <span className="font-mono text-[11px] text-ink-700">{pts}</span>
-                  <div
-                    className="w-full rounded-t-md bg-ocean-600 transition-all hover:bg-sun-500"
-                    style={{ height: `${Math.max(6, (pts / velocity.max) * 100)}%` }}
-                    title={`Sprint ${sprint}: ${pts} point`}
-                  />
-                  <span className="font-mono text-[10px] text-mist-400">S{sprint}</span>
-                </div>
-              ))}
+            <div className="relative mt-5 h-44">
+              {/* Garis rata-rata: bikin sprint di atas/bawah target langsung kelihatan */}
+              <div
+                className="pointer-events-none absolute inset-x-0 border-t border-dashed border-sun-500"
+                style={{ bottom: `calc(1.75rem + ${(velocity.avg / velocity.max) * 100}% * 0.78)` }}
+              >
+                <span className="absolute -top-4 right-0 rounded bg-sun-100 px-1.5 py-0.5 font-mono text-[10px] text-sun-700">
+                  avg {velocity.avg}
+                </span>
+              </div>
+
+              <div className="flex h-full items-end gap-2 sm:gap-3">
+                {velocity.rows.map(([sprint, pts]) => (
+                  <div key={sprint} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                    <span className="font-mono text-[11px] font-semibold text-ink-700">{pts}</span>
+                    {/* Tinggi bar dihitung dari sisa ruang kolom (kolomnya h-full, jadi persen valid) */}
+                    <div
+                      className={`w-full rounded-t-md transition-all ${
+                        pts >= velocity.avg ? "bg-ocean-600 hover:bg-ocean-500" : "bg-sky-400 hover:bg-sky-500"
+                      }`}
+                      style={{ height: `${Math.max(4, (pts / velocity.max) * 78)}%` }}
+                      title={`Sprint ${sprint}: ${pts} point`}
+                    />
+                    <span className="font-mono text-[10px] text-mist-400">S{sprint}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <p className="mt-3 text-sm text-mist-600">

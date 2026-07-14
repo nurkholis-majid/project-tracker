@@ -7,7 +7,7 @@ import { EPIC_STATUS, STORY_PROGRESS, labelOf, type Epic, type Story } from "@/l
 import { epicWindow } from "@/lib/kpi";
 import {
   Badge, Btn, Card, EmptyRow, ErrorBar, Field, FormActions, JiraLink, Loading, Modal,
-  PageHead, Progress, ROW, RowActions, Select, StatusSelect, Td, Th, inputCls, optionsOf,
+  PageHead, Progress, ROW, RowActions, Select, StatusSelect, Td, Th, filterCls, inputCls, optionsOf,
 } from "@/components/ui";
 
 type SortKey = "baru" | "nama" | "point" | "deadline";
@@ -27,6 +27,7 @@ const blank = (): Partial<Epic> => ({
 export default function EpicsPage() {
   const { data, loading, error, save, remove, patch } = useTracker();
   const [status, setStatus] = useState("all");
+  const [q, setQ] = useState("");
   const [sort, setSort] = useState<SortKey>("baru");
   const [form, setForm] = useState<Partial<Epic> | null>(null);
   const [detail, setDetail] = useState<Epic | null>(null);
@@ -34,7 +35,11 @@ export default function EpicsPage() {
   const stats = useMemo(() => epicStats(data), [data]);
 
   const rows = useMemo(() => {
-    const list = data.epics.filter((e) => status === "all" || e.status === status);
+    const list = data.epics.filter(
+      (e) =>
+        (status === "all" || e.status === status) &&
+        (!q || `${e.name} ${e.jira_key ?? ""}`.toLowerCase().includes(q.toLowerCase()))
+    );
     const sorted = [...list];
     if (sort === "baru") sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
     if (sort === "nama") sorted.sort((a, b) => a.name.localeCompare(b.name));
@@ -42,7 +47,7 @@ export default function EpicsPage() {
     if (sort === "deadline")
       sorted.sort((a, b) => (a.end_date || "9999").localeCompare(b.end_date || "9999"));
     return sorted;
-  }, [data.epics, status, sort, stats]);
+  }, [data.epics, status, sort, stats, q]);
 
   if (loading) return <Loading />;
 
@@ -59,8 +64,14 @@ export default function EpicsPage() {
     <div>
       <PageHead
         title="Epic"
-        sub="Satu epic mewakili satu project."
+        sub="Satu epic mewakili satu project. Total story dan story point terhitung otomatis dari data story — tidak perlu diisi manual."
       >
+        <input
+          className={filterCls + " w-56"}
+          placeholder="🔍 Cari epic / DLB-…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
         <Select
           w="w-44"
           value={status}
@@ -150,7 +161,7 @@ export default function EpicsPage() {
               );
             })}
             {rows.length === 0 && (
-              <EmptyRow cols={8} icon="📦" msg="Belum ada epic di filter ini. Tarik dari Jira, atau bikin manual." />
+              <EmptyRow cols={8} icon="📦" msg="Nggak ada epic yang cocok. Coba ubah kata kunci atau filternya." />
             )}
           </tbody>
         </table>

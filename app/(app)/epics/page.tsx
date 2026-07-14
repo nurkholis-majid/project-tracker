@@ -64,7 +64,6 @@ export default function EpicsPage() {
     <div>
       <PageHead
         title="Epic"
-        sub="Satu epic mewakili satu project. Total story dan story point terhitung otomatis dari data story — tidak perlu diisi manual."
       >
         <input
           className={filterCls + " w-56"}

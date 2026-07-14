@@ -35,7 +35,6 @@ export default function ReleasesPage() {
     <div>
       <PageHead
         title="Release"
-        sub="Satu fix version, satu URL folder SharePoint. Daftar story di bawahnya terisi otomatis dari yang di-assign ke versi ini."
       >
         <Select
           w="w-48"

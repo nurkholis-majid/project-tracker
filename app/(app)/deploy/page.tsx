@@ -83,7 +83,6 @@ export default function DeployPage() {
     <div>
       <PageHead
         title="Need to Deploy"
-        sub="Story yang development-nya sudah Done tapi belum sampai production. Assign ke fix version, lalu tandai Deployed setelah rilis."
       >
         <input className={filterCls + " w-52"} placeholder="🔍 Cari story…" value={q} onChange={(e) => setQ(e.target.value)} />
         <Select

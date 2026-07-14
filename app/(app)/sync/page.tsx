@@ -52,7 +52,6 @@ export default function SyncPage() {
     <div className="space-y-6">
       <PageHead
         title="Jira Sync"
-        sub="Menarik epic dan story dari Jira. Bersifat read-only — tidak ada data di Jira yang diubah."
       />
 
       <ErrorBar msg={error} />

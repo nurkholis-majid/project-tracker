@@ -64,7 +64,6 @@ export default function FlagsPage() {
     <div>
       <PageHead
         title="Feature Flag"
-        sub="Kondisi flag di tiap environment. Klik sel DEV, UAT, atau PROD untuk mengubah nilainya. Cukup dicatat untuk epic yang memang memakai flag."
       >
         <Select
           w="w-56"

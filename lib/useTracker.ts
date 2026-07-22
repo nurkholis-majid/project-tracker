@@ -19,16 +19,17 @@ export function useTracker() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [epics, stories, releases, docs, flags] = await Promise.all([
+    const [epics, stories, releases, docs, flags, systems] = await Promise.all([
       sb.from("epics").select("*").order("created_at", { ascending: false }),
       sb.from("stories").select("*").order("sprint", { ascending: false, nullsFirst: false }),
       sb.from("releases").select("*"),
       sb.from("release_documents").select("*"),
       sb.from("feature_flags").select("*").order("created_at", { ascending: true }),
+      sb.from("systems").select("*").order("name", { ascending: true }),
     ]);
 
     const firstErr =
-      epics.error || stories.error || releases.error || docs.error || flags.error;
+      epics.error || stories.error || releases.error || docs.error || flags.error || systems.error;
     if (firstErr) {
       setError("Data gagal dimuat: " + firstErr.message);
       setLoading(false);
@@ -48,6 +49,7 @@ export function useTracker() {
       docs: (docs.data ?? []) as Tracker["docs"],
       // baris lama bisa punya epic_ids null; normalkan jadi array kosong
       flags: ((flags.data ?? []) as Tracker["flags"]).map((f) => ({ ...f, epic_ids: f.epic_ids ?? [] })),
+      systems: (systems.data ?? []) as Tracker["systems"],
     });
     setLoading(false);
   }, [sb]);
@@ -113,4 +115,5 @@ const tableKey = (t: string) =>
     releases: "releases",
     release_documents: "docs",
     feature_flags: "flags",
+    systems: "systems",
   }[t] ?? t);

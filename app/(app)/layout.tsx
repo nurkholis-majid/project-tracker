@@ -12,6 +12,7 @@ const NAV = [
   { href: "/deploy",    icon: "🚢", label: "Need to Deploy" },
   { href: "/releases",  icon: "🚀", label: "Release" },
   { href: "/flags",     icon: "🚩", label: "Feature Flag" },
+  { href: "/systems",   icon: "🖥️", label: "Sistem" },
   { href: "/sync",      icon: "🔄", label: "Jira Sync" },
 ];
 

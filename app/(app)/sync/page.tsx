@@ -36,6 +36,11 @@ export default function SyncPage() {
       });
       const json = await res.json();
       if (!res.ok) setError(json.error ?? "Sync gagal.");
+      else if (json.total === 0)
+        setError(json.hint ?? "JQL ini tidak menghasilkan issue apa pun.");
+      else if (json.stories === 0 && json.epics === 0)
+        // Issue datang tapi tak ada yang tersimpan — tampilkan rinciannya.
+        setError(json.hint ?? `Jira mengembalikan ${json.total} issue tapi tidak ada yang tersimpan.`);
       else
         setResult(
           `✅ Beres — ${json.epics} epic dan ${json.stories} story diperbarui dari ${json.total} issue.` +
@@ -52,6 +57,7 @@ export default function SyncPage() {
     <div className="space-y-6">
       <PageHead
         title="Jira Sync"
+        sub="Menarik epic dan story dari Jira. Bersifat read-only — tidak ada data di Jira yang diubah."
       />
 
       <ErrorBar msg={error} />

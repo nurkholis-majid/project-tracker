@@ -86,7 +86,14 @@ export async function POST(req: Request) {
       const res = await fetch(`${JIRA_BASE_URL}/rest/api/3/search/jql`, {
         method: "POST",
         headers: authHeaders,
-        body: JSON.stringify({ jql: q, fields: fieldList, maxResults: 100, ...(token ? { nextPageToken: token } : {}) }),
+        body: JSON.stringify({
+          jql: q,
+          fields: fieldList,
+          maxResults: 100,
+          // Recent edits may not be visible without this — Jira's read-after-write note.
+          reconcileIssues: [] as number[],
+          ...(token ? { nextPageToken: token } : {}),
+        }),
         cache: "no-store",
       });
       if (!res.ok) throw new Error(`Jira menolak permintaan (${res.status}). ${(await res.text()).slice(0, 200)}`);
@@ -174,24 +181,56 @@ export async function POST(req: Request) {
   let unlinked = 0;
 
   if (storyIssues.length) {
+    // Sprint bisa datang sebagai array of objek {id,name,...} ATAU (Jira lama)
+    // array of string "com.atlassian...@[id=25254,name=LSS Sprint 66,...]".
+    // Ambil nomor sprint dari name; kalau tak ada, pakai id. Jangan pernah NaN —
+    // kolom sprint bertipe integer, dan satu NaN menolak seluruh batch.
+    const sprintNumber = (raw: unknown): number | null => {
+      if (raw == null) return null;
+      if (typeof raw === "object") {
+        const o = raw as any;
+        const fromName = String(o.name ?? "").match(/(\d+)\s*$/)?.[1];
+        const n = Number(fromName ?? o.id);
+        return Number.isFinite(n) ? n : null;
+      }
+      const str = String(raw);
+      const fromName = str.match(/name=[^,\]]*?(\d+)/)?.[1];
+      const fromId = str.match(/id=(\d+)/)?.[1];
+      const n = Number(fromName ?? fromId ?? str.match(/\d+/)?.[0]);
+      return Number.isFinite(n) ? n : null;
+    };
+    const dateField = (raw: unknown, key: "startDate" | "endDate"): string | null => {
+      if (raw && typeof raw === "object") {
+        const v = (raw as any)[key];
+        return v ? String(v).slice(0, 10) : null;
+      }
+      if (typeof raw === "string") {
+        const m = raw.match(new RegExp(`${key}=([^,\\]]+)`));
+        return m && m[1] !== "<null>" ? m[1].slice(0, 10) : null;
+      }
+      return null;
+    };
+
     const rows = storyIssues.map((i) => {
       const f = i.fields;
       const sprints: any[] = Array.isArray(f[sprintField]) ? f[sprintField] : [];
       const last = sprints[sprints.length - 1];
       const prev = existingByKey.get(i.key);
 
+      const pts = Number(f[spField]);
       const row: Record<string, unknown> = {
         jira_key: i.key,
         title: f.summary,
-        story_points: Number(f[spField]) || 0,
-        sprint: last ? Number(String(last.name ?? "").match(/\d+/)?.[0] ?? last.id) : null,
+        story_points: Number.isFinite(pts) ? pts : 0,
+        sprint: sprintNumber(last),
         jira_status: f.status?.name ?? "",
         synced_at: new Date().toISOString(),
       };
 
-      // Tanggal story = jendela sprint-nya (persis seperti di sheet lama).
-      if (last?.startDate) row.start_date = String(last.startDate).slice(0, 10);
-      if (last?.endDate) row.end_date = String(last.endDate).slice(0, 10);
+      const start = dateField(last, "startDate");
+      const end = dateField(last, "endDate");
+      if (start) row.start_date = start;
+      if (end) row.end_date = end;
 
       const key = epicKeyOf(f);
       const epicId = key ? epicIdByKey.get(key) : undefined;
@@ -206,7 +245,17 @@ export async function POST(req: Request) {
     });
 
     const { error } = await db.from("stories").upsert(rows, { onConflict: "jira_key" });
-    if (error) return NextResponse.json({ error: "Gagal simpan story: " + error.message }, { status: 500 });
+    if (error)
+      return NextResponse.json(
+        {
+          error:
+            "Gagal simpan story: " +
+            error.message +
+            (error.details ? ` — ${error.details}` : "") +
+            (error.hint ? ` (${error.hint})` : ""),
+        },
+        { status: 500 }
+      );
     storyCount = rows.length;
   }
 
@@ -218,11 +267,26 @@ export async function POST(req: Request) {
     message: `${issues.length} issue diproses, ${unlinked} story tanpa epic`,
   });
 
+  // 0 issue biasanya bukan error kode: JQL-nya memang tidak match apa pun.
+  // Beri petunjuk supaya jelas ini soal query, bukan bug sync.
+  const hint =
+    issues.length === 0
+      ? "JQL ini tidak menghasilkan issue apa pun di Jira. Cek nama sprint/component, atau coba query paling sederhana: project = " +
+        (JIRA_PROJECT_KEY || "DLB")
+      : issues.length > 0 && storyCount === 0 && epicCount === 0
+      ? `Jira mengembalikan ${issues.length} issue, tapi tidak ada yang tersimpan. ` +
+        `Terklasifikasi sebagai epic: ${issues.length - storyIssues.length}, sebagai story: ${storyIssues.length}.`
+      : undefined;
+
   return NextResponse.json({
     ok: true,
     epics: epicCount,
     stories: storyCount,
     total: issues.length,
+    storyIssues: storyIssues.length,
+    epicIssues: issues.length - storyIssues.length,
     unlinked,
+    hint,
+    jql,
   });
 }

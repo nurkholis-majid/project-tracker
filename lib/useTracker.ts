@@ -25,7 +25,7 @@ export function useTracker() {
       sb.from("releases").select("*"),
       sb.from("release_documents").select("*"),
       sb.from("feature_flags").select("*").order("created_at", { ascending: true }),
-      sb.from("systems").select("*").order("name", { ascending: true }),
+      sb.from("systems").select("*").order("name", { ascending: true }),  // urutan env diselesaikan di halaman
     ]);
 
     const firstErr =

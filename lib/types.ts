@@ -126,6 +126,7 @@ export type System = {
   description: string | null;
   url: string | null;
   environments: Environment[];
-  epic_id: string | null;
+  username: string | null;
+  password: string | null;
   created_at: string;
 };
